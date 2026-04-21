@@ -1,0 +1,215 @@
+/* ── Search modal ─────────────────────────────────────────── */
+.qmd-search-modal .modal-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 560px;
+}
+
+.qmd-query-input {
+  width: 100%;
+  font-size: 1.1em;
+  padding: 8px 10px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+/* ── Collection + mode row ────────────────────────────────── */
+.qmd-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qmd-label {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.qmd-collection-select {
+  flex: 1;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  padding: 4px 6px;
+}
+
+/* ── Mode segmented control ───────────────────────────────── */
+.qmd-mode-row {
+  display: flex;
+  gap: 0;
+}
+
+.qmd-mode-btn {
+  flex: 1;
+  padding: 5px 0;
+  font-size: 0.85em;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.qmd-mode-btn:first-child { border-radius: var(--radius-s) 0 0 var(--radius-s); }
+.qmd-mode-btn:last-child  { border-radius: 0 var(--radius-s) var(--radius-s) 0; }
+.qmd-mode-btn + .qmd-mode-btn { border-left: none; }
+
+.qmd-mode-btn--active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+/* ── Intent collapsible ───────────────────────────────────── */
+.qmd-intent-toggle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85em;
+  padding: 2px 0;
+}
+
+.qmd-intent-row {
+  display: flex;
+  margin-top: 4px;
+}
+
+.qmd-intent-row--hidden {
+  display: none;
+}
+
+.qmd-intent-input {
+  width: 100%;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  padding: 5px 8px;
+  font-size: 0.9em;
+}
+
+/* ── Result list ──────────────────────────────────────────── */
+.qmd-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.qmd-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  background: var(--background-secondary);
+  transition: background 100ms;
+}
+
+.qmd-result-item:hover,
+.qmd-result-item:focus {
+  background: var(--background-modifier-hover);
+  outline: none;
+}
+
+.qmd-result-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.qmd-result-title {
+  font-weight: 600;
+  color: var(--text-normal);
+  flex: 1 1 auto;
+}
+
+.qmd-result-badge {
+  font-size: 0.72em;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  white-space: nowrap;
+}
+
+.qmd-result-score {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.qmd-result-snippet {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  margin: 0;
+  /* clamp to 3 lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.qmd-result-path {
+  font-size: 0.75em;
+  color: var(--text-faint);
+  font-family: var(--font-monospace);
+}
+
+/* ── Status modal ─────────────────────────────────────────── */
+.qmd-status-modal .modal-content {
+  padding: 16px;
+  min-width: 480px;
+}
+
+.qmd-status-health {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.qmd-status-ok  { color: var(--color-green); font-weight: 600; }
+.qmd-status-err { color: var(--color-red);   font-weight: 600; }
+
+.qmd-status-message { color: var(--text-muted); font-size: 0.9em; }
+
+.qmd-status-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.qmd-status-table th,
+.qmd-status-table td {
+  text-align: left;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.qmd-status-table th { color: var(--text-muted); font-weight: 500; }
+
+/* ── Settings tab ─────────────────────────────────────────── */
+.qmd-version-hint {
+  font-size: 0.82em;
+  margin: -6px 0 8px 0;
+}
+
+.qmd-version-ok    { color: var(--color-green); }
+.qmd-version-error { color: var(--color-red); }
+
+/* ── Shared ───────────────────────────────────────────────── */
+.qmd-error    { color: var(--color-red); }
+.qmd-muted    { color: var(--text-muted); }
+.qmd-no-results { color: var(--text-muted); text-align: center; padding: 20px 0; }

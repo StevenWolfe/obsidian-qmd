@@ -1,0 +1,80 @@
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { spawn } = require('child_process') as typeof import('child_process');
+
+import { Notice, Plugin } from 'obsidian';
+import { DEFAULT_SETTINGS, QmdSearchSettings, QmdSettingTab } from './settings';
+import type { QmdClient } from './client/base';
+import { CliQmdClient } from './client/cli';
+import { McpQmdClient } from './client/mcp';
+import { SearchModal } from './ui/SearchModal';
+import { StatusModal } from './ui/StatusModal';
+
+export default class QmdSearchPlugin extends Plugin {
+  settings!: QmdSearchSettings;
+  client!: QmdClient;
+
+  async onload(): Promise<void> {
+    await this.loadSettings();
+    this.client = this.buildClient();
+
+    this.addCommand({
+      id: 'qmd-search',
+      name: 'QMD: Search',
+      callback: () => new SearchModal(this.app, this.client, this.settings).open(),
+    });
+
+    this.addCommand({
+      id: 'qmd-status',
+      name: 'QMD: Index status',
+      callback: () => new StatusModal(this.app, this.client).open(),
+    });
+
+    this.addCommand({
+      id: 'qmd-reindex',
+      name: 'QMD: Re-index collections',
+      callback: () => this.reindex(),
+    });
+
+    this.addSettingTab(new QmdSettingTab(this.app, this));
+  }
+
+  async onunload(): Promise<void> {
+    await this.client.dispose();
+  }
+
+  async loadSettings(): Promise<void> {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+
+  async saveSettings(): Promise<void> {
+    await this.saveData(this.settings);
+    // Rebuild client when transport-relevant settings change
+    this.client.dispose().catch(console.error);
+    this.client = this.buildClient();
+  }
+
+  private buildClient(): QmdClient {
+    if (this.settings.transportMode === 'mcp-http') {
+      const c = new McpQmdClient(this.settings.qmdBinaryPath, this.settings.mcpPort);
+      c.init().catch((err: Error) => {
+        new Notice(`QMD: Failed to start MCP daemon — ${err.message}`);
+      });
+      return c;
+    }
+    return new CliQmdClient(this.settings.qmdBinaryPath);
+  }
+
+  private reindex(): void {
+    const notice = new Notice('QMD: re-indexing collections…', 0);
+    const proc = spawn(this.settings.qmdBinaryPath, ['update'], { env: process.env });
+    proc.on('close', (code: number) => {
+      notice.hide();
+      if (code === 0) new Notice('QMD: re-index complete ✓');
+      else new Notice(`QMD: re-index failed (exit ${code})`);
+    });
+    proc.on('error', (err: Error) => {
+      notice.hide();
+      new Notice(`QMD: re-index error — ${err.message}`);
+    });
+  }
+}
