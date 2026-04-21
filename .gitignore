@@ -1,0 +1,28 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+main.js
+main.js.map
+
+# Obsidian local data
+.obsidian/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.*
+*.pem
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
