@@ -58,7 +58,7 @@ export class SearchModal extends Modal {
       if (value === this.activeMode) btn.addClass('qmd-mode-btn--active');
       btn.addEventListener('click', () => {
         this.activeMode = value;
-        modeRow.querySelectorAll('.qmd-mode-btn').forEach((b) => b.removeClass('qmd-mode-btn--active'));
+        modeRow.querySelectorAll('.qmd-mode-btn').forEach((b) => b.classList.remove('qmd-mode-btn--active'));
         btn.addClass('qmd-mode-btn--active');
       });
     }
