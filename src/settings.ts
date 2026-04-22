@@ -1,5 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { spawn } = require('child_process') as typeof import('child_process');
+const { execFile } = require('child_process') as typeof import('child_process');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const fs = require('fs') as typeof import('fs');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const os = require('os') as typeof import('os');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -25,15 +27,17 @@ export const DEFAULT_SETTINGS: QmdSearchSettings = {
 };
 
 function runVersion(binary: string): Promise<string> {
+  // For path-like strings, verify existence before spawning — spawning a
+  // non-existent file in Electron's renderer corrupts IPC channel cleanup.
+  if (!binary.trim()) return Promise.reject(new Error('empty path'));
+  if ((binary.includes('/') || binary.includes('\\')) && !fs.existsSync(binary)) {
+    return Promise.reject(new Error('file not found'));
+  }
   return new Promise((resolve, reject) => {
-    const proc = spawn(binary, ['--version'], { env: process.env });
-    const out: Buffer[] = [];
-    proc.stdout.on('data', (c: Buffer) => out.push(c));
-    proc.on('close', (code: number) => {
-      if (code === 0) resolve(Buffer.concat(out).toString('utf8').trim());
-      else reject(new Error(`exit code ${code}`));
+    execFile(binary, ['--version'], { timeout: 5000, env: process.env as NodeJS.ProcessEnv }, (err, stdout) => {
+      if (err) reject(err);
+      else resolve(stdout.trim());
     });
-    proc.on('error', reject);
   });
 }
 
@@ -154,26 +158,22 @@ export class QmdSettingTab extends PluginSettingTab {
           new Notice(`QMD: registering collection "${name}"…`);
           try {
             await new Promise<void>((resolve, reject) => {
-              const proc = spawn(
+              execFile(
                 this.plugin.settings.qmdBinaryPath,
                 ['collection', 'add', vaultPath, '--name', name],
-                { env: process.env },
+                { timeout: 30_000, env: process.env as NodeJS.ProcessEnv },
+                (err) => (err ? reject(err) : resolve()),
               );
-              proc.on('close', (code: number) =>
-                code === 0 ? resolve() : reject(new Error(`exit ${code}`)),
-              );
-              proc.on('error', reject);
             });
 
             new Notice(`QMD: generating embeddings for "${name}"…`);
             await new Promise<void>((resolve, reject) => {
-              const proc = spawn(this.plugin.settings.qmdBinaryPath, ['embed'], {
-                env: process.env,
-              });
-              proc.on('close', (code: number) =>
-                code === 0 ? resolve() : reject(new Error(`exit ${code}`)),
+              execFile(
+                this.plugin.settings.qmdBinaryPath,
+                ['embed'],
+                { timeout: 600_000, env: process.env as NodeJS.ProcessEnv },
+                (err) => (err ? reject(err) : resolve()),
               );
-              proc.on('error', reject);
             });
 
             new Notice(`QMD: vault registered as "${name}" ✓`);

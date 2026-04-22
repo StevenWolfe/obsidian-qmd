@@ -1,5 +1,5 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { spawn } = require('child_process') as typeof import('child_process');
+const { execFile } = require('child_process') as typeof import('child_process');
 
 import type { QmdClient } from './base';
 import type {
@@ -17,26 +17,15 @@ const MODE_CMD: Record<SearchOptions['mode'], string> = {
 
 function runQmd(binary: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(binary, args, { env: process.env });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-
-    proc.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
-    proc.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
-
-    proc.on('close', (code: number) => {
-      if (code !== 0) {
-        const errText = Buffer.concat(stderr).toString('utf8').trim();
-        reject(new Error(`qmd exited with code ${code}: ${errText}`));
+    execFile(binary, args, { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, env: process.env as NodeJS.ProcessEnv }, (err, stdout, stderr) => {
+      if (err) {
+        const detail = stderr?.trim() ? `: ${stderr.trim()}` : '';
+        reject(new Error(`${err.message}${detail}`));
       } else {
-        if (stderr.length > 0) {
-          console.debug('[qmd stderr]', Buffer.concat(stderr).toString('utf8').trim());
-        }
-        resolve(Buffer.concat(stdout).toString('utf8'));
+        if (stderr?.trim()) console.debug('[qmd stderr]', stderr.trim());
+        resolve(stdout);
       }
     });
-
-    proc.on('error', (err: Error) => reject(err));
   });
 }
 
