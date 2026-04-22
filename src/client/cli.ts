@@ -39,6 +39,44 @@ function runQmd(binary: string, args: string[]): Promise<string> {
   });
 }
 
+function parseStatusText(raw: string): QmdStatus {
+  const lines = raw.split('\n');
+  const collections: QmdStatus['collections'] = [];
+
+  const totalMatch = raw.match(/Total:\s+(\d+) files indexed/);
+  const totalDocs = totalMatch ? parseInt(totalMatch[1], 10) : 0;
+
+  // Collection entries are indented 2 spaces followed by name + (qmd://...)
+  // Child properties (Files:, Updated:) are indented 4+ spaces.
+  for (let i = 0; i < lines.length; i++) {
+    const collMatch = lines[i].match(/^  (\S+)\s+\(qmd:\/\//);
+    if (!collMatch) continue;
+
+    const name = collMatch[1];
+    let docCount = 0;
+    let lastIndexed: string | undefined;
+
+    for (let j = i + 1; j < lines.length && /^ {4}/.test(lines[j]); j++) {
+      const filesMatch = lines[j].match(/Files:\s+(\d+)/);
+      if (filesMatch) {
+        docCount = parseInt(filesMatch[1], 10);
+        const inline = lines[j].match(/\(updated (.+?)\)/);
+        if (inline) lastIndexed = inline[1];
+      }
+      const updMatch = lines[j].match(/Updated:\s+(.+)/);
+      if (updMatch) lastIndexed = updMatch[1].trim();
+    }
+
+    collections.push({ name, docCount, lastIndexed });
+  }
+
+  return {
+    healthy: true,
+    message: `${totalDocs} doc${totalDocs !== 1 ? 's' : ''} indexed`,
+    collections,
+  };
+}
+
 export class CliQmdClient implements QmdClient {
   constructor(private readonly binary: string = 'qmd') {}
 
@@ -62,13 +100,9 @@ export class CliQmdClient implements QmdClient {
   }
 
   async status(): Promise<QmdStatus> {
-    const raw = await runQmd(this.binary, ['status', '--json']);
-    const parsed = JSON.parse(raw) as Partial<QmdStatus>;
-    return {
-      healthy: parsed.healthy ?? true,
-      message: parsed.message ?? 'OK',
-      collections: parsed.collections ?? [],
-    };
+    // qmd status has no --json flag; parse the plain text output.
+    const raw = await runQmd(this.binary, ['status']);
+    return parseStatusText(raw);
   }
 
   async dispose(): Promise<void> {

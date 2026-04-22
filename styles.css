@@ -252,6 +252,12 @@
   margin-bottom: 8px;
 }
 
+.qmd-plugin-version {
+  font-size: 0.78em;
+  color: var(--text-faint);
+  margin: 0 0 12px;
+}
+
 .qmd-version-hint {
   font-size: 0.82em;
   margin: -6px 0 8px 0;
