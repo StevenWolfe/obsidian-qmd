@@ -47,7 +47,7 @@ export class QmdSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     // Binary path
-    let versionEl: HTMLElement;
+    const versionEl = containerEl.createEl('p', { cls: 'qmd-version-hint' });
     new Setting(containerEl)
       .setName('qmd binary path')
       .setDesc('Path to the qmd executable. Leave as "qmd" to use PATH.')
@@ -55,24 +55,26 @@ export class QmdSettingTab extends PluginSettingTab {
         text
           .setPlaceholder('qmd')
           .setValue(this.plugin.settings.qmdBinaryPath)
-          .onChange(async (value) => {
+          .onChange((value) => {
+            // update in-memory only; save + version check happen on blur
             this.plugin.settings.qmdBinaryPath = value;
-            await this.plugin.saveSettings();
           });
         text.inputEl.addEventListener('blur', async () => {
+          await this.plugin.saveSettings();
           try {
             const version = await runVersion(this.plugin.settings.qmdBinaryPath);
+            if (!versionEl.isConnected) return;
             versionEl.setText(`✓ ${version}`);
             versionEl.removeClass('qmd-version-error');
             versionEl.addClass('qmd-version-ok');
           } catch {
+            if (!versionEl.isConnected) return;
             versionEl.setText('✗ qmd not found or failed');
             versionEl.removeClass('qmd-version-ok');
             versionEl.addClass('qmd-version-error');
           }
         });
       });
-    versionEl = containerEl.createEl('p', { cls: 'qmd-version-hint' });
 
     // Transport mode
     new Setting(containerEl)
@@ -112,15 +114,17 @@ export class QmdSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Default collection')
       .setDesc('Pre-selected collection in the search modal. Leave blank for all.')
-      .addText((text) =>
+      .addText((text) => {
         text
           .setPlaceholder('')
           .setValue(this.plugin.settings.defaultCollection)
-          .onChange(async (value) => {
+          .onChange((value) => {
             this.plugin.settings.defaultCollection = value;
-            await this.plugin.saveSettings();
-          }),
-      );
+          });
+        text.inputEl.addEventListener('blur', async () => {
+          await this.plugin.saveSettings();
+        });
+      });
 
     // Default search mode
     new Setting(containerEl)
