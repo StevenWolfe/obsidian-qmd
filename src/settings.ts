@@ -54,6 +54,11 @@ export class QmdSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
+    containerEl.createEl('p', {
+      text: `plugin v${this.plugin.manifest.version}`,
+      cls: 'qmd-plugin-version',
+    });
+
     // Binary path
     const versionEl = containerEl.createEl('p', { cls: 'qmd-version-hint' });
     new Setting(containerEl)

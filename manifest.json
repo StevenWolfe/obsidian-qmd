@@ -1,7 +1,7 @@
 {
   "id": "obsidian-qmd-search",
   "name": "QMD Search",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minAppVersion": "1.0.0",
   "description": "Search qmd-indexed knowledge bases from inside Obsidian.",
   "author": "obsidian-qmd contributors",
