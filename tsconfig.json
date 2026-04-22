@@ -8,6 +8,7 @@
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "node",
     "ignoreDeprecations": "5.0",
+    "skipLibCheck": true,
     "importHelpers": true,
     "isolatedModules": true,
     "strictNullChecks": true,
