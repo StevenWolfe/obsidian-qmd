@@ -57,7 +57,9 @@ export class McpQmdClient implements QmdClient {
 
     this.daemon = spawnDaemon(this.binary, this.port);
     this.spawned = true;
+    console.log(`[qmd] spawned MCP daemon on port ${this.port}, waiting for endpoint…`);
     await waitForEndpoint(this.port, this.initAbort.signal);
+    console.log(`[qmd] MCP daemon ready on port ${this.port}`);
   }
 
   private rpc(tool: string, args: Record<string, unknown>): Promise<unknown> {
@@ -94,7 +96,7 @@ export class McpQmdClient implements QmdClient {
           });
         },
       );
-      req.on('error', reject);
+      req.on('error', (e) => { console.error('[qmd] MCP rpc error:', e.message); reject(e); });
       req.write(body);
       req.end();
     });
