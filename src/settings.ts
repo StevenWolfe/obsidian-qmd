@@ -9,6 +9,7 @@ const path = require('path') as typeof import('path');
 
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import type QmdSearchPlugin from './main';
+import { type LogLevel, setLogLevel, log } from './util/log';
 
 export interface QmdSearchSettings {
   qmdBinaryPath: string;
@@ -16,6 +17,7 @@ export interface QmdSearchSettings {
   mcpPort: number;
   defaultCollection: string;
   defaultSearchMode: 'keyword' | 'semantic' | 'hybrid';
+  logLevel: LogLevel;
 }
 
 export const DEFAULT_SETTINGS: QmdSearchSettings = {
@@ -24,6 +26,7 @@ export const DEFAULT_SETTINGS: QmdSearchSettings = {
   mcpPort: 8181,
   defaultCollection: '',
   defaultSearchMode: 'hybrid',
+  logLevel: 'error',
 };
 
 function runVersion(binary: string): Promise<string> {
@@ -205,6 +208,24 @@ export class QmdSettingTab extends PluginSettingTab {
         });
       });
 
+    // Log level
+    new Setting(containerEl)
+      .setName('Log level')
+      .setDesc('Controls what qmd plugin output appears in the console / --enable-logging file.')
+      .addDropdown((dd) =>
+        dd
+          .addOption('off',   'Off')
+          .addOption('error', 'Errors only (default)')
+          .addOption('warn',  'Warnings + errors')
+          .addOption('debug', 'Debug (verbose)')
+          .setValue(this.plugin.settings.logLevel)
+          .onChange(async (value: LogLevel) => {
+            this.plugin.settings.logLevel = value;
+            setLogLevel(value);
+            await this.plugin.saveSettings();
+          }),
+      );
+
     // Status summary
     containerEl.createEl('h3', { text: 'Status', cls: 'qmd-section-heading' });
     const statusEl = containerEl.createDiv({ cls: 'qmd-status-inline' });
@@ -236,10 +257,11 @@ export class QmdSettingTab extends PluginSettingTab {
         row.createEl('td', { text: String(col.docCount) });
         row.createEl('td', { text: col.lastIndexed ?? '—' });
       }
-    }).catch(() => {
+    }).catch((err: Error) => {
+      log.error('status failed:', err.message);
       if (!statusEl.isConnected) return;
       statusEl.empty();
-      statusEl.createEl('p', { text: 'Status unavailable — is qmd installed?', cls: 'qmd-muted' });
+      statusEl.createEl('p', { text: `Status error: ${err.message}`, cls: 'qmd-error' });
     });
   }
 }

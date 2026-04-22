@@ -5,6 +5,7 @@ import type { SearchMode } from '../client/types';
 import { loadCollectionNames } from '../util/config';
 import { navigateToResult } from '../util/navigate';
 import { buildResultItem } from './ResultItem';
+import { log } from '../util/log';
 
 interface ModelLoadedHost {
   modelLoaded: boolean;
@@ -138,7 +139,7 @@ export class SearchModal extends Modal {
       }
     } catch (err) {
       const msg = (err as Error).message;
-      console.error('[qmd] search failed:', msg);
+      log.error('search failed:', msg);
       this.resultsContainer.createEl('p', {
         text: `Error: ${msg}`,
         cls: 'qmd-error',

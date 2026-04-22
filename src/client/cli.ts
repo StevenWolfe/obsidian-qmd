@@ -8,6 +8,7 @@ import type {
   QmdStatus,
   SearchOptions,
 } from './types';
+import { log } from '../util/log';
 
 const MODE_CMD: Record<SearchOptions['mode'], string> = {
   keyword: 'search',
@@ -26,11 +27,11 @@ function runQmd(binary: string, args: string[]): Promise<string> {
     execFile(binary, args, { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, env: process.env as NodeJS.ProcessEnv }, (err, stdout, stderr) => {
       if (err) {
         const clean = stripAnsi(err.message);
-        console.error(`[qmd] command failed: ${clean}`);
+        log.error('command failed:', clean);
         reject(new Error(clean));
       } else {
         const cleanErr = stderr ? stripAnsi(stderr).trim() : '';
-        if (cleanErr) console.warn(`[qmd] stderr: ${cleanErr}`);
+        if (cleanErr) log.warn('stderr:', cleanErr);
         resolve(stdout);
       }
     });

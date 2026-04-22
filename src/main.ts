@@ -3,6 +3,7 @@ const { execFile } = require('child_process') as typeof import('child_process');
 
 import { Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, QmdSearchSettings, QmdSettingTab } from './settings';
+import { setLogLevel } from './util/log';
 import type { QmdClient } from './client/base';
 import { CliQmdClient } from './client/cli';
 import { McpQmdClient } from './client/mcp';
@@ -45,10 +46,12 @@ export default class QmdSearchPlugin extends Plugin {
 
   async loadSettings(): Promise<void> {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    setLogLevel(this.settings.logLevel);
   }
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
+    setLogLevel(this.settings.logLevel);
     // Rebuild client when transport-relevant settings change
     this.client.dispose().catch(console.error);
     this.client = this.buildClient();
