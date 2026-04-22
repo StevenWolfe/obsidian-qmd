@@ -98,10 +98,46 @@
 .qmd-results {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: 420px;
+  gap: 0;
+  max-height: 480px;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.qmd-results--hidden {
+  display: none;
+}
+
+.qmd-results-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.qmd-results-section + .qmd-results-section {
+  margin-top: 12px;
+}
+
+.qmd-results-section-heading {
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 6px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.qmd-results-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.qmd-result-badge--vault {
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
 }
 
 .qmd-result-item {
