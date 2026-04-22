@@ -10,6 +10,7 @@ const path = require('path') as typeof import('path');
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import type QmdSearchPlugin from './main';
 import { type LogLevel, setLogLevel, log } from './util/log';
+import { buildEnv } from './util/env';
 
 export interface QmdSearchSettings {
   qmdBinaryPath: string;
@@ -37,7 +38,7 @@ function runVersion(binary: string): Promise<string> {
     return Promise.reject(new Error('file not found'));
   }
   return new Promise((resolve, reject) => {
-    execFile(binary, ['--version'], { timeout: 5000, env: process.env as NodeJS.ProcessEnv }, (err, stdout) => {
+    execFile(binary, ['--version'], { timeout: 5000, env: buildEnv() }, (err, stdout) => {
       if (err) reject(err);
       else resolve(stdout.trim());
     });
@@ -164,7 +165,7 @@ export class QmdSettingTab extends PluginSettingTab {
               execFile(
                 this.plugin.settings.qmdBinaryPath,
                 ['collection', 'add', vaultPath, '--name', name],
-                { timeout: 30_000, env: process.env as NodeJS.ProcessEnv },
+                { timeout: 30_000, env: buildEnv() },
                 (err) => (err ? reject(err) : resolve()),
               );
             });
@@ -174,7 +175,7 @@ export class QmdSettingTab extends PluginSettingTab {
               execFile(
                 this.plugin.settings.qmdBinaryPath,
                 ['embed'],
-                { timeout: 600_000, env: process.env as NodeJS.ProcessEnv },
+                { timeout: 600_000, env: buildEnv() },
                 (err) => (err ? reject(err) : resolve()),
               );
             });

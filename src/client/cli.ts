@@ -9,6 +9,7 @@ import type {
   SearchOptions,
 } from './types';
 import { log } from '../util/log';
+import { buildEnv } from '../util/env';
 
 const MODE_CMD: Record<SearchOptions['mode'], string> = {
   keyword: 'search',
@@ -24,7 +25,7 @@ const stripAnsi = (s: string) => s.replace(ANSI_RE, '');
 
 function runQmd(binary: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(binary, args, { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, env: process.env as NodeJS.ProcessEnv }, (err, stdout, stderr) => {
+    execFile(binary, args, { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, env: buildEnv() }, (err, stdout, stderr) => {
       if (err) {
         const clean = stripAnsi(err.message);
         log.error('command failed:', clean);
