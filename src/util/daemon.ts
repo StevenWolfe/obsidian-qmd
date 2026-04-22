@@ -49,6 +49,7 @@ export function spawnDaemon(binary: string, port: number): ChildProcess {
 
 export async function waitForEndpoint(
   port: number,
+  signal: AbortSignal,
   timeoutMs = 15_000,
   intervalMs = 500,
 ): Promise<void> {
@@ -56,14 +57,21 @@ export async function waitForEndpoint(
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
+    if (signal.aborted) return;
     try {
-      const res = await fetch(url, { method: 'GET' });
+      const res = await fetch(url, { method: 'GET', signal });
       if (res.ok || res.status < 500) return;
-    } catch {
-      // not up yet
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
     }
-    await new Promise((r) => setTimeout(r, intervalMs));
+    if (signal.aborted) return;
+    await new Promise<void>((r) => {
+      const t = setTimeout(r, intervalMs);
+      signal.addEventListener('abort', () => { clearTimeout(t); r(); }, { once: true });
+    });
   }
 
-  throw new Error(`qmd MCP daemon did not start within ${timeoutMs}ms on port ${port}`);
+  if (!signal.aborted) {
+    throw new Error(`qmd MCP daemon did not start within ${timeoutMs}ms on port ${port}`);
+  }
 }

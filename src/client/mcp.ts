@@ -29,6 +29,7 @@ interface JsonRpcResponse {
 export class McpQmdClient implements QmdClient {
   private daemon: ChildProcess | null = null;
   private spawned = false;
+  private initAbort: AbortController | null = null;
 
   constructor(
     private readonly binary: string = 'qmd',
@@ -36,14 +37,15 @@ export class McpQmdClient implements QmdClient {
   ) {}
 
   async init(): Promise<void> {
+    this.initAbort = new AbortController();
     const existingPid = readPidFile();
     if (existingPid !== null && isProcessAlive(existingPid)) {
-      return; // reuse existing daemon
+      return;
     }
 
     this.daemon = spawnDaemon(this.binary, this.port);
     this.spawned = true;
-    await waitForEndpoint(this.port);
+    await waitForEndpoint(this.port, this.initAbort.signal);
   }
 
   private get baseUrl(): string {
@@ -105,6 +107,7 @@ export class McpQmdClient implements QmdClient {
   }
 
   async dispose(): Promise<void> {
+    this.initAbort?.abort();
     if (this.spawned && this.daemon) {
       this.daemon.kill();
       this.daemon = null;
