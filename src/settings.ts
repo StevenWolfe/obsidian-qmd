@@ -204,5 +204,42 @@ export class QmdSettingTab extends PluginSettingTab {
           if (err) new Notice(`QMD: failed to open config — ${err}`);
         });
       });
+
+    // Status summary
+    containerEl.createEl('h3', { text: 'Status', cls: 'qmd-section-heading' });
+    const statusEl = containerEl.createDiv({ cls: 'qmd-status-inline' });
+    statusEl.createEl('p', { text: 'Checking…', cls: 'qmd-muted' });
+
+    this.plugin.client.status().then((s) => {
+      if (!statusEl.isConnected) return;
+      statusEl.empty();
+      const health = statusEl.createDiv({ cls: 'qmd-status-health' });
+      health.createEl('span', {
+        text: s.healthy ? '✓ Healthy' : '✗ Unhealthy',
+        cls: s.healthy ? 'qmd-status-ok' : 'qmd-status-err',
+      });
+      if (s.message) health.createEl('span', { text: ` — ${s.message}`, cls: 'qmd-status-message' });
+
+      if (s.collections.length === 0) {
+        statusEl.createEl('p', { text: 'No collections registered.', cls: 'qmd-muted' });
+        return;
+      }
+      const table = statusEl.createEl('table', { cls: 'qmd-status-table' });
+      const head = table.createEl('thead').createEl('tr');
+      head.createEl('th', { text: 'Collection' });
+      head.createEl('th', { text: 'Docs' });
+      head.createEl('th', { text: 'Last indexed' });
+      const tbody = table.createEl('tbody');
+      for (const col of s.collections) {
+        const row = tbody.createEl('tr');
+        row.createEl('td', { text: col.name });
+        row.createEl('td', { text: String(col.docCount) });
+        row.createEl('td', { text: col.lastIndexed ?? '—' });
+      }
+    }).catch(() => {
+      if (!statusEl.isConnected) return;
+      statusEl.empty();
+      statusEl.createEl('p', { text: 'Status unavailable — is qmd installed?', cls: 'qmd-muted' });
+    });
   }
 }
