@@ -4,6 +4,7 @@ const { execFile } = require('child_process') as typeof import('child_process');
 import { Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, QmdSearchSettings, QmdSettingTab } from './settings';
 import { setLogLevel } from './util/log';
+import { buildEnv } from './util/env';
 import type { QmdClient } from './client/base';
 import { CliQmdClient } from './client/cli';
 import { McpQmdClient } from './client/mcp';
@@ -72,7 +73,7 @@ export default class QmdSearchPlugin extends Plugin {
 
   private reindex(): void {
     const notice = new Notice('QMD: re-indexing collections…', 0);
-    execFile(this.settings.qmdBinaryPath, ['update'], { timeout: 600_000, env: process.env as NodeJS.ProcessEnv }, (err) => {
+    execFile(this.settings.qmdBinaryPath, ['update'], { timeout: 600_000, env: buildEnv() }, (err) => {
       notice.hide();
       if (err) new Notice(`QMD: re-index error — ${err.message}`);
       else new Notice('QMD: re-index complete ✓');

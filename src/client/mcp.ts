@@ -1,6 +1,4 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const fs = require('fs') as typeof import('fs');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const http = require('http') as typeof import('http');
 
 import { log } from '../util/log';
@@ -20,11 +18,11 @@ import {
 } from '../util/daemon';
 import type { ChildProcess } from 'child_process';
 
-const MODE_TOOL: Record<SearchOptions['mode'], string> = {
-  keyword: 'structured_search',
-  semantic: 'structured_search',
-  hybrid: 'query',
-};
+// Sub-query type for the MCP `query` tool
+interface SubQuery {
+  type: 'lex' | 'vec' | 'hyde';
+  query: string;
+}
 
 interface JsonRpcResponse {
   result?: {
@@ -37,6 +35,7 @@ export class McpQmdClient implements QmdClient {
   private daemon: ChildProcess | null = null;
   private spawned = false;
   private initAbort: AbortController | null = null;
+  private sessionId: string | null = null;
 
   constructor(
     private readonly binary: string = 'qmd',
@@ -46,6 +45,8 @@ export class McpQmdClient implements QmdClient {
   async init(): Promise<void> {
     this.initAbort = new AbortController();
 
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const fs = require('fs') as typeof import('fs');
     // Validate binary before spawning — spawning a non-existent file in
     // Electron's renderer corrupts IPC channel state.
     if ((this.binary.includes('/') || this.binary.includes('\\')) && !fs.existsSync(this.binary)) {
@@ -53,15 +54,60 @@ export class McpQmdClient implements QmdClient {
     }
 
     const existingPid = readPidFile();
-    if (existingPid !== null && isProcessAlive(existingPid)) {
-      return;
+    if (existingPid === null || !isProcessAlive(existingPid)) {
+      this.daemon = spawnDaemon(this.binary, this.port);
+      this.spawned = true;
+      log.debug(`spawned MCP daemon on port ${this.port}, waiting for endpoint…`);
     }
 
-    this.daemon = spawnDaemon(this.binary, this.port);
-    this.spawned = true;
-    log.debug(`spawned MCP daemon on port ${this.port}, waiting for endpoint…`);
     await waitForEndpoint(this.port, this.initAbort.signal);
     log.debug(`MCP daemon ready on port ${this.port}`);
+
+    // MCP requires an initialize handshake; response carries the session ID
+    await this.mcpInitialize();
+  }
+
+  private mcpInitialize(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const body = JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'obsidian-qmd-search', version: '0.1.0' },
+        },
+        id: 0,
+      });
+
+      const req = http.request(
+        {
+          hostname: '127.0.0.1', port: this.port, path: '/mcp', method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+            'Content-Length': Buffer.byteLength(body),
+          },
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('end', () => {
+            const sid = res.headers['mcp-session-id'];
+            if (sid) {
+              this.sessionId = Array.isArray(sid) ? sid[0] : sid;
+              log.debug('MCP session ID:', this.sessionId);
+              resolve();
+            } else {
+              reject(new Error('MCP initialize: no session ID in response'));
+            }
+          });
+        },
+      );
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
   }
 
   private rpc(tool: string, args: Record<string, unknown>): Promise<unknown> {
@@ -73,9 +119,15 @@ export class McpQmdClient implements QmdClient {
         id: 1,
       });
 
+      const headers: Record<string, string | number> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+        'Content-Length': Buffer.byteLength(body),
+      };
+      if (this.sessionId) headers['mcp-session-id'] = this.sessionId;
+
       const req = http.request(
-        { hostname: '127.0.0.1', port: this.port, path: '/mcp', method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+        { hostname: '127.0.0.1', port: this.port, path: '/mcp', method: 'POST', headers },
         (res) => {
           const chunks: Buffer[] = [];
           res.on('data', (c: Buffer) => chunks.push(c));
@@ -105,18 +157,26 @@ export class McpQmdClient implements QmdClient {
   }
 
   async search(opts: SearchOptions): Promise<QmdResult[]> {
-    const tool = MODE_TOOL[opts.mode];
-    const args: Record<string, unknown> = { query: opts.query };
-    if (opts.collection) args['collection'] = opts.collection;
+    // Build typed sub-queries based on mode
+    const searches: SubQuery[] = [];
+    if (opts.mode === 'keyword' || opts.mode === 'hybrid') {
+      searches.push({ type: 'lex', query: opts.query });
+    }
+    if (opts.mode === 'semantic' || opts.mode === 'hybrid') {
+      searches.push({ type: 'vec', query: opts.query });
+    }
+
+    const args: Record<string, unknown> = { searches };
+    if (opts.collection) args['collections'] = [opts.collection];
     if (opts.intent) args['intent'] = opts.intent;
     if (opts.limit) args['limit'] = opts.limit;
 
-    const result = (await this.rpc(tool, args)) as { results?: QmdResult[] } | null;
+    const result = (await this.rpc('query', args)) as { results?: QmdResult[] } | null;
     return result?.results ?? [];
   }
 
   async get(pathOrDocid: string): Promise<QmdDocument> {
-    const result = await this.rpc('get', { path: pathOrDocid });
+    const result = await this.rpc('get', { file: pathOrDocid });
     return result as QmdDocument;
   }
 
@@ -131,6 +191,7 @@ export class McpQmdClient implements QmdClient {
 
   async dispose(): Promise<void> {
     this.initAbort?.abort();
+    this.sessionId = null;
     if (this.spawned && this.daemon) {
       this.daemon.kill();
       this.daemon = null;

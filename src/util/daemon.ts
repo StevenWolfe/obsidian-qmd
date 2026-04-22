@@ -11,6 +11,7 @@ const { spawn } = require('child_process') as typeof import('child_process');
 
 import type { ChildProcess } from 'child_process';
 import { log } from './log';
+import { buildEnv } from './env';
 
 const PID_FILE = path.join(os.homedir(), '.cache', 'qmd', 'mcp.pid');
 
@@ -37,7 +38,7 @@ export function spawnDaemon(binary: string, port: number): ChildProcess {
   const child = spawn(binary, ['mcp', '--http', '--port', String(port)], {
     detached: false,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: process.env,
+    env: buildEnv(),
   });
 
   child.stdout?.on('data', (chunk: Buffer) => {
