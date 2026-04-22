@@ -129,7 +129,7 @@ export class QmdSettingTab extends PluginSettingTab {
             this.plugin.settings.defaultCollection = value;
           });
         text.inputEl.addEventListener('blur', async () => {
-          await this.plugin.saveSettings();
+          await this.plugin.saveSettings(false);
         });
       });
 
@@ -143,7 +143,7 @@ export class QmdSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.defaultSearchMode)
           .onChange(async (value: 'keyword' | 'semantic' | 'hybrid') => {
             this.plugin.settings.defaultSearchMode = value;
-            await this.plugin.saveSettings();
+            await this.plugin.saveSettings(false);
           });
       });
 
@@ -222,7 +222,7 @@ export class QmdSettingTab extends PluginSettingTab {
           .onChange(async (value: LogLevel) => {
             this.plugin.settings.logLevel = value;
             setLogLevel(value);
-            await this.plugin.saveSettings();
+            await this.plugin.saveSettings(false);
           }),
       );
 

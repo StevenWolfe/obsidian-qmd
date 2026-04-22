@@ -49,13 +49,14 @@ export default class QmdSearchPlugin extends Plugin {
     setLogLevel(this.settings.logLevel);
   }
 
-  async saveSettings(): Promise<void> {
+  async saveSettings(rebuildClient = true): Promise<void> {
     await this.saveData(this.settings);
     setLogLevel(this.settings.logLevel);
-    // Rebuild client when transport-relevant settings change
-    this.client.dispose().catch(console.error);
-    this.client = this.buildClient();
-    this.modelLoaded = false;
+    if (rebuildClient) {
+      this.client.dispose().catch(console.error);
+      this.client = this.buildClient();
+      this.modelLoaded = false;
+    }
   }
 
   private buildClient(): QmdClient {
