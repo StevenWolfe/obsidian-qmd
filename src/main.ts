@@ -12,6 +12,7 @@ import { StatusModal } from './ui/StatusModal';
 export default class QmdSearchPlugin extends Plugin {
   settings!: QmdSearchSettings;
   client!: QmdClient;
+  modelLoaded = false;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -20,7 +21,7 @@ export default class QmdSearchPlugin extends Plugin {
     this.addCommand({
       id: 'qmd-search',
       name: 'QMD: Search',
-      callback: () => new SearchModal(this.app, this.client, this.settings).open(),
+      callback: () => new SearchModal(this.app, this.client, this.settings, this).open(),
     });
 
     this.addCommand({
@@ -51,6 +52,7 @@ export default class QmdSearchPlugin extends Plugin {
     // Rebuild client when transport-relevant settings change
     this.client.dispose().catch(console.error);
     this.client = this.buildClient();
+    this.modelLoaded = false;
   }
 
   private buildClient(): QmdClient {

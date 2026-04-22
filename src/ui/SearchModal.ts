@@ -1,10 +1,14 @@
-import { App, Modal, Notice } from 'obsidian';
+import { App, Modal, Notice, Plugin } from 'obsidian';
 import type { QmdClient } from '../client/base';
 import type { QmdSearchSettings } from '../settings';
 import type { SearchMode } from '../client/types';
 import { loadCollectionNames } from '../util/config';
 import { navigateToResult } from '../util/navigate';
 import { buildResultItem } from './ResultItem';
+
+interface ModelLoadedHost {
+  modelLoaded: boolean;
+}
 
 export class SearchModal extends Modal {
   private queryInput!: HTMLInputElement;
@@ -13,12 +17,12 @@ export class SearchModal extends Modal {
   private intentRow!: HTMLElement;
   private resultsContainer!: HTMLElement;
   private activeMode: SearchMode;
-  private modelLoaded = false;
 
   constructor(
     app: App,
     private readonly client: QmdClient,
     private readonly settings: QmdSearchSettings,
+    private readonly plugin: ModelLoadedHost,
   ) {
     super(app);
     this.activeMode = settings.defaultSearchMode;
@@ -101,7 +105,7 @@ export class SearchModal extends Modal {
     const isCliHybrid =
       this.settings.transportMode === 'cli' &&
       this.activeMode === 'hybrid' &&
-      !this.modelLoaded;
+      !this.plugin.modelLoaded;
 
     const noticeText = isCliHybrid
       ? 'QMD: loading models and searching…'
@@ -118,7 +122,7 @@ export class SearchModal extends Modal {
         intent: this.intentInput.value.trim() || undefined,
       });
 
-      this.modelLoaded = true;
+      this.plugin.modelLoaded = true;
 
       if (results.length === 0) {
         this.resultsContainer.createEl('p', { text: 'No results.', cls: 'qmd-no-results' });
