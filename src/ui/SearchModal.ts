@@ -30,7 +30,7 @@ export class SearchModal extends Modal {
 
   onOpen(): void {
     const { contentEl } = this;
-    contentEl.addClass('qmd-search-modal');
+    this.modalEl.addClass('qmd-search-modal');
 
     // Query input
     this.queryInput = contentEl.createEl('input', {
@@ -137,8 +137,10 @@ export class SearchModal extends Modal {
         this.resultsContainer.appendChild(item);
       }
     } catch (err) {
+      const msg = (err as Error).message;
+      console.error('[qmd] search failed:', msg);
       this.resultsContainer.createEl('p', {
-        text: `Error: ${(err as Error).message}`,
+        text: `Error: ${msg}`,
         cls: 'qmd-error',
       });
     } finally {

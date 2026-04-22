@@ -201,6 +201,21 @@
 .qmd-status-table th { color: var(--text-muted); font-weight: 500; }
 
 /* ── Settings tab ─────────────────────────────────────────── */
+.qmd-section-heading {
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 20px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.qmd-status-inline {
+  margin-bottom: 8px;
+}
+
 .qmd-version-hint {
   font-size: 0.82em;
   margin: -6px 0 8px 0;

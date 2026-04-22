@@ -15,14 +15,22 @@ const MODE_CMD: Record<SearchOptions['mode'], string> = {
   hybrid: 'query',
 };
 
+// Strip ANSI/VT100 escape sequences — qmd emits cursor-hide/show codes
+// (\x1b[?25l, \x1b[?25h) to stderr when it thinks it's in a TTY, which
+// Node embeds verbatim into execFile error messages.
+const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
+const stripAnsi = (s: string) => s.replace(ANSI_RE, '');
+
 function runQmd(binary: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(binary, args, { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, env: process.env as NodeJS.ProcessEnv }, (err, stdout, stderr) => {
       if (err) {
-        const detail = stderr?.trim() ? `: ${stderr.trim()}` : '';
-        reject(new Error(`${err.message}${detail}`));
+        const clean = stripAnsi(err.message);
+        console.error(`[qmd] command failed: ${clean}`);
+        reject(new Error(clean));
       } else {
-        if (stderr?.trim()) console.debug('[qmd stderr]', stderr.trim());
+        const cleanErr = stderr ? stripAnsi(stderr).trim() : '';
+        if (cleanErr) console.warn(`[qmd] stderr: ${cleanErr}`);
         resolve(stdout);
       }
     });
