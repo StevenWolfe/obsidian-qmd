@@ -188,11 +188,20 @@ export class QmdSettingTab extends PluginSettingTab {
       .setName('Open index config')
       .setDesc('Open ~/.config/qmd/index.yml in the system default app.')
       .addButton((btn) => {
-        btn.setButtonText('Open config').onClick(() => {
+        btn.setButtonText('Open config').onClick(async () => {
           const configPath = path.join(os.homedir(), '.config', 'qmd', 'index.yml');
+          const configDir = path.dirname(configPath);
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           const { shell } = require('electron') as typeof import('electron');
-          shell.openPath(configPath);
+          const target = fs.existsSync(configPath) ? configPath
+            : fs.existsSync(configDir) ? configDir
+            : null;
+          if (!target) {
+            new Notice('QMD: ~/.config/qmd/ not found — install qmd first.');
+            return;
+          }
+          const err = await shell.openPath(target);
+          if (err) new Notice(`QMD: failed to open config — ${err}`);
         });
       });
   }

@@ -1,3 +1,8 @@
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const fs = require('fs') as typeof import('fs');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const http = require('http') as typeof import('http');
+
 import type { QmdClient } from './base';
 import type {
   QmdResult,
@@ -38,6 +43,13 @@ export class McpQmdClient implements QmdClient {
 
   async init(): Promise<void> {
     this.initAbort = new AbortController();
+
+    // Validate binary before spawning — spawning a non-existent file in
+    // Electron's renderer corrupts IPC channel state.
+    if ((this.binary.includes('/') || this.binary.includes('\\')) && !fs.existsSync(this.binary)) {
+      throw new Error(`qmd binary not found: ${this.binary}`);
+    }
+
     const existingPid = readPidFile();
     if (existingPid !== null && isProcessAlive(existingPid)) {
       return;
@@ -48,37 +60,44 @@ export class McpQmdClient implements QmdClient {
     await waitForEndpoint(this.port, this.initAbort.signal);
   }
 
-  private get baseUrl(): string {
-    return `http://localhost:${this.port}/mcp`;
-  }
+  private rpc(tool: string, args: Record<string, unknown>): Promise<unknown> {
+    return new Promise((resolve, reject) => {
+      const body = JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: { name: tool, arguments: args },
+        id: 1,
+      });
 
-  private async rpc(tool: string, args: Record<string, unknown>): Promise<unknown> {
-    const body = JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'tools/call',
-      params: { name: tool, arguments: args },
-      id: 1,
+      const req = http.request(
+        { hostname: '127.0.0.1', port: this.port, path: '/mcp', method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c: Buffer) => chunks.push(c));
+          res.on('end', () => {
+            try {
+              const text = Buffer.concat(chunks).toString('utf8');
+              if (!res.statusCode || res.statusCode >= 400) {
+                reject(new Error(`MCP HTTP error ${res.statusCode}: ${text}`));
+                return;
+              }
+              const json = JSON.parse(text) as JsonRpcResponse;
+              if (json.error) { reject(new Error(`MCP error: ${json.error.message}`)); return; }
+              const content = json.result?.content;
+              if (!content?.length) { resolve(null); return; }
+              const textPart = content.find((c) => c.type === 'text');
+              resolve(textPart?.text ? JSON.parse(textPart.text) : null);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        },
+      );
+      req.on('error', reject);
+      req.write(body);
+      req.end();
     });
-
-    const res = await fetch(this.baseUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
-
-    if (!res.ok) {
-      throw new Error(`MCP HTTP error ${res.status}: ${await res.text()}`);
-    }
-
-    const json = (await res.json()) as JsonRpcResponse;
-    if (json.error) throw new Error(`MCP error: ${json.error.message}`);
-
-    const content = json.result?.content;
-    if (!content?.length) return null;
-
-    const textPart = content.find((c) => c.type === 'text');
-    if (!textPart?.text) return null;
-    return JSON.parse(textPart.text);
   }
 
   async search(opts: SearchOptions): Promise<QmdResult[]> {

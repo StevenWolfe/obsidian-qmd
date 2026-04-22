@@ -1,6 +1,8 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const fs = require('fs') as typeof import('fs');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
+const net = require('net') as typeof import('net');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const os = require('os') as typeof import('os');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const path = require('path') as typeof import('path');
@@ -47,23 +49,32 @@ export function spawnDaemon(binary: string, port: number): ChildProcess {
   return child;
 }
 
+function tcpReachable(port: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal.aborted) { resolve(false); return; }
+    const socket = net.connect(port, '127.0.0.1');
+    const cleanup = (result: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(result);
+    };
+    socket.on('connect', () => cleanup(true));
+    socket.on('error', () => cleanup(false));
+    signal.addEventListener('abort', () => cleanup(false), { once: true });
+  });
+}
+
 export async function waitForEndpoint(
   port: number,
   signal: AbortSignal,
   timeoutMs = 15_000,
   intervalMs = 500,
 ): Promise<void> {
-  const url = `http://localhost:${port}/mcp`;
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
     if (signal.aborted) return;
-    try {
-      const res = await fetch(url, { method: 'GET', signal });
-      if (res.ok || res.status < 500) return;
-    } catch (err) {
-      if ((err as Error).name === 'AbortError') return;
-    }
+    if (await tcpReachable(port, signal)) return;
     if (signal.aborted) return;
     await new Promise<void>((r) => {
       const t = setTimeout(r, intervalMs);
