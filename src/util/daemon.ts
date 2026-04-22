@@ -10,6 +10,7 @@ const path = require('path') as typeof import('path');
 const { spawn } = require('child_process') as typeof import('child_process');
 
 import type { ChildProcess } from 'child_process';
+import { log } from './log';
 
 const PID_FILE = path.join(os.homedir(), '.cache', 'qmd', 'mcp.pid');
 
@@ -40,10 +41,10 @@ export function spawnDaemon(binary: string, port: number): ChildProcess {
   });
 
   child.stdout?.on('data', (chunk: Buffer) => {
-    console.debug('[qmd mcp stdout]', chunk.toString('utf8').trim());
+    log.debug('mcp stdout:', chunk.toString('utf8').trim());
   });
   child.stderr?.on('data', (chunk: Buffer) => {
-    console.debug('[qmd mcp stderr]', chunk.toString('utf8').trim());
+    log.debug('mcp stderr:', chunk.toString('utf8').trim());
   });
 
   return child;
