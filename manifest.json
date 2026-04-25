@@ -3,7 +3,7 @@
   "name": "QMD Search",
   "version": "0.1.2",
   "minAppVersion": "1.0.0",
-  "description": "Search qmd-indexed knowledge bases from inside Obsidian.",
+  "description": "Local semantic and keyword search over qmd-indexed knowledge bases.",
   "author": "obsidian-qmd contributors",
   "authorUrl": "",
   "isDesktopOnly": true
