@@ -6,10 +6,12 @@ import { log } from '../util/log';
 import type { QmdClient } from './base';
 import type {
   QmdResult,
+  RawQmdResult,
   QmdDocument,
   QmdStatus,
   SearchOptions,
 } from './types';
+import { normalizeResult } from './types';
 import {
   readPidFile,
   isProcessAlive,
@@ -171,8 +173,9 @@ export class McpQmdClient implements QmdClient {
     if (opts.intent) args['intent'] = opts.intent;
     if (opts.limit) args['limit'] = opts.limit;
 
-    const result = (await this.rpc('query', args)) as { results?: QmdResult[] } | null;
-    return result?.results ?? [];
+    const result = (await this.rpc('query', args)) as RawQmdResult[] | { results?: RawQmdResult[] } | null;
+    const items = Array.isArray(result) ? result : (result?.results ?? []);
+    return items.map(normalizeResult);
   }
 
   async get(pathOrDocid: string): Promise<QmdDocument> {
