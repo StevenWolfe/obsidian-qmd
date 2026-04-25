@@ -12,13 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm install          # install deps (js-yaml, esbuild, typescript, obsidian types)
 npm run build        # production bundle → main.js
 npm run dev          # watch mode for development
-```
-
-To install into a vault for manual testing, copy `main.js`, `manifest.json`, and `styles.css` into `.obsidian/plugins/obsidian-qmd-search/` inside the vault directory.
-
-There is no automated test suite yet. TypeScript type-checking is the primary correctness check; run:
-```bash
-npx tsc --noEmit
+npx tsc --noEmit     # type-check only (no test suite yet)
+VAULT_PATH=~/path/to/vault npm run deploy  # copy main.js + manifest.json + styles.css into vault
 ```
 
 ## Architecture
@@ -27,23 +22,36 @@ npx tsc --noEmit
 
 All `qmd` interaction is behind a `QmdClient` interface (`src/client/base.ts`). The plugin instantiates one of two concrete implementations based on the `transportMode` setting, and swaps the instance if settings change.
 
-- **`CliQmdClient`** (`src/client/cli.ts`) — spawns `qmd` as a subprocess per query using `require('child_process').spawn`. Buffers full stdout before JSON parsing. Mode→command mapping: `keyword`→`search`, `semantic`→`vsearch`, `hybrid`→`query`. `dispose()` is a no-op.
-- **`McpQmdClient`** (`src/client/mcp.ts`) — sends JSON-RPC 2.0 POSTs to `http://localhost:{port}/mcp`. On `init()`, checks `~/.cache/qmd/mcp.pid`; if the process is alive it reuses it, otherwise spawns `qmd mcp --http` and polls until ready (15 s timeout). On `dispose()`, kills the daemon only if this instance spawned it.
+- **`CliQmdClient`** (`src/client/cli.ts`) — uses `execFile` (not `spawn`) per query. Buffers full stdout before JSON parsing. Mode→command mapping: `keyword`→`search`, `semantic`→`vsearch`, `hybrid`→`query`. Strips ANSI escape sequences from error messages (qmd emits cursor-hide/show codes when it thinks it's in a TTY). `qmd status` has no `--json` flag; its plain-text output is parsed by `parseStatusText()`. `dispose()` is a no-op.
+- **`McpQmdClient`** (`src/client/mcp.ts`) — uses Node's `http` module (not `fetch`) to send JSON-RPC 2.0 POSTs to `http://localhost:{port}/mcp`. On `init()`, checks `~/.cache/qmd/mcp.pid`; if alive reuses it, otherwise spawns `qmd mcp --http` and TCP-polls until port accepts connections (15 s timeout via `waitForEndpoint`). Performs an MCP `initialize` handshake to obtain a session ID, which is sent as `mcp-session-id` header on all subsequent calls. On `dispose()`, kills the daemon only if this instance spawned it.
 
 ### Key data flows
 
 1. User opens SearchModal → types query → presses Enter
-2. `SearchModal` calls `client.search(opts)` → results rendered via `buildResultItem()`
-3. Clicking a result calls `navigateToResult(app, result)` (`src/util/navigate.ts`) which opens the file and scrolls to the line
+2. `SearchModal` fires `client.search(opts)` and an inline vault fuzzy-search in parallel
+3. Vault results (Obsidian `prepareFuzzySearch`) render immediately; qmd results replace the loading state when the promise resolves
+4. Clicking a result calls `navigateToResult(app, result)` (`src/util/navigate.ts`) which opens the file and scrolls to the line
+
+### Result normalisation
+
+`qmd --json` returns a bare array of `RawQmdResult` where the file field is a URI like `qmd://collection-name/relative/path.md`. `normalizeResult()` in `src/client/types.ts` splits this into `collection` and `path` fields used throughout the UI.
 
 ### Settings (`src/settings.ts`)
 
-`QmdSearchSettings` is persisted via Obsidian's `loadData/saveData`. `QmdSettingTab.display()` re-renders itself after transport mode changes to show/hide the port field. "Register vault as collection" shells out to `qmd collection add` then `qmd embed`.
+`QmdSearchSettings` is persisted via Obsidian's `loadData/saveData`. `saveSettings(rebuildClient)` accepts a boolean to skip client teardown for non-transport changes (e.g. default collection). `QmdSettingTab.display()` re-renders itself after transport mode changes to show/hide the port field.
 
 ### Node built-ins
 
-All Node builtins (`child_process`, `fs`, `os`, `path`) are loaded via `require(...)` (CJS), not ESM `import`, because esbuild marks them as external. They are type-cast via `as typeof import(...)` for TypeScript. `electron` is also external — the settings tab accesses `require('electron').shell` for `openPath`.
+All Node builtins (`child_process`, `fs`, `os`, `path`, `http`, `net`) are loaded via `require(...)` (CJS), not ESM `import`, because esbuild marks them as external. They are type-cast via `as typeof import(...)` for TypeScript. `electron` is also external — the settings tab accesses `require('electron').shell` for `openPath`.
+
+### PATH resolution (`src/util/env.ts`)
+
+Electron's renderer process strips the user's shell PATH. `buildEnv()` reconstructs a PATH that includes NVM-managed node bin dirs, `~/.local/bin`, `~/.npm-global/bin`, and standard system paths. All `execFile`/`spawn` calls pass `{ env: buildEnv() }`.
 
 ### Collection name discovery
 
-`src/util/config.ts` reads and parses `~/.config/qmd/index.yml` using `js-yaml`. It handles both array-of-objects and object-keyed YAML shapes, returning `string[]` and falling back to `[]` on any error.
+`src/util/config.ts` reads and parses `~/.config/qmd/index.yml` using `js-yaml`. Handles both array-of-objects and object-keyed YAML shapes, returning `string[]` and falling back to `[]` on any error.
+
+### Logging
+
+`src/util/log.ts` exports a `log` object (`log.error`, `log.warn`, `log.debug`) gated by a `LogLevel` setting (`off` | `error` | `warn` | `debug`). Default level is `error`. `setLogLevel()` is called from `loadSettings` and `saveSettings`.
