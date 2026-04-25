@@ -2,7 +2,15 @@ import { App, MarkdownView, Notice } from 'obsidian';
 import type { QmdResult } from '../client/types';
 
 export async function navigateToResult(app: App, result: QmdResult): Promise<void> {
-  const file = app.vault.getFileByPath(result.path);
+  // result.path is relative to the collection root (e.g. "notes/file.md").
+  // Try direct vault lookup first, then fall back to basename match.
+  const file =
+    app.vault.getFileByPath(result.path) ??
+    app.vault.getMarkdownFiles().find(
+      (f) => f.path.endsWith('/' + result.path) || f.basename === result.path.replace(/\.md$/, ''),
+    ) ??
+    null;
+
   if (!file) {
     new Notice(`QMD: File not found: ${result.path}`);
     return;

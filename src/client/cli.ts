@@ -4,10 +4,12 @@ const { execFile } = require('child_process') as typeof import('child_process');
 import type { QmdClient } from './base';
 import type {
   QmdResult,
+  RawQmdResult,
   QmdDocument,
   QmdStatus,
   SearchOptions,
 } from './types';
+import { normalizeResult } from './types';
 import { log } from '../util/log';
 import { buildEnv } from '../util/env';
 
@@ -89,14 +91,16 @@ export class CliQmdClient implements QmdClient {
     if (opts.intent) args.push('--intent', opts.intent);
 
     const raw = await runQmd(this.binary, args);
-    const parsed = JSON.parse(raw) as { results?: QmdResult[] };
-    return parsed.results ?? [];
+    // Output is a bare JSON array, not {results: [...]}
+    const parsed = JSON.parse(raw) as RawQmdResult[] | { results?: RawQmdResult[] };
+    const items = Array.isArray(parsed) ? parsed : (parsed.results ?? []);
+    return items.map(normalizeResult);
   }
 
   async get(pathOrDocid: string): Promise<QmdDocument> {
-    const args = ['get', pathOrDocid, '--json'];
-    const raw = await runQmd(this.binary, args);
-    return JSON.parse(raw) as QmdDocument;
+    // qmd get has no --json flag — returns raw document text
+    const raw = await runQmd(this.binary, ['get', pathOrDocid]);
+    return { title: pathOrDocid, path: pathOrDocid, collection: '', content: raw, docid: pathOrDocid };
   }
 
   async status(): Promise<QmdStatus> {
