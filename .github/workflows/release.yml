@@ -31,10 +31,17 @@ jobs:
             exit 1
           fi
 
+      - name: Package plugin zip
+        run: |
+          mkdir -p qmd-search
+          cp main.js manifest.json styles.css qmd-search/
+          zip -r qmd-search.zip qmd-search/
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            qmd-search.zip
             main.js
             manifest.json
             styles.css
