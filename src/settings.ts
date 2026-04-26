@@ -14,6 +14,7 @@ import { buildEnv, resolveQmdBinary } from './util/env';
 
 export interface QmdSearchSettings {
   qmdBinaryPath: string;
+  indexName: string;
   transportMode: 'cli' | 'mcp-http';
   mcpPort: number;
   defaultCollection: string;
@@ -23,6 +24,7 @@ export interface QmdSearchSettings {
 
 export const DEFAULT_SETTINGS: QmdSearchSettings = {
   qmdBinaryPath: 'qmd',
+  indexName: '',
   transportMode: 'cli',
   mcpPort: 8181,
   defaultCollection: '',
@@ -178,6 +180,23 @@ export class QmdSettingTab extends PluginSettingTab {
               btn.setButtonText('Auto-detect');
             }
           }
+        });
+      });
+
+    // Index name
+    new Setting(containerEl)
+      .setName('Index name')
+      .setDesc('Named index to use (--index flag). Leave blank for the qmd default ("index").')
+      .addText((text) => {
+        text
+          .setPlaceholder('index')
+          .setValue(this.plugin.settings.indexName)
+          .onChange((value) => {
+            this.plugin.settings.indexName = value.trim();
+          });
+        text.inputEl.addEventListener('blur', async () => {
+          await this.plugin.saveSettings();
+          this.renderStatus();
         });
       });
 

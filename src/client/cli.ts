@@ -87,13 +87,20 @@ function parseStatusText(raw: string): QmdStatus {
 }
 
 export class CliQmdClient implements QmdClient {
-  constructor(private readonly binary: string = 'qmd') {
-    log.debug('CliQmdClient created, binary:', binary);
+  constructor(
+    private readonly binary: string = 'qmd',
+    private readonly indexName: string = '',
+  ) {
+    log.debug('CliQmdClient created, binary:', binary, 'index:', indexName || '(default)');
+  }
+
+  private ix(): string[] {
+    return this.indexName ? ['--index', this.indexName] : [];
   }
 
   async search(opts: SearchOptions): Promise<QmdResult[]> {
     const cmd = MODE_CMD[opts.mode];
-    const args: string[] = [cmd, opts.query, '--json', '--index="lead-workspace"'];
+    const args: string[] = [...this.ix(), cmd, opts.query, '--json'];
 
     if (opts.collection) args.push('-c', opts.collection);
     if (opts.limit) args.push('-n', String(opts.limit));
@@ -110,13 +117,13 @@ export class CliQmdClient implements QmdClient {
 
   async get(pathOrDocid: string): Promise<QmdDocument> {
     // qmd get has no --json flag — returns raw document text
-    const raw = await runQmd(this.binary, ['get', pathOrDocid]);
+    const raw = await runQmd(this.binary, [...this.ix(), 'get', pathOrDocid]);
     return { title: pathOrDocid, path: pathOrDocid, collection: '', content: raw, docid: pathOrDocid };
   }
 
   async status(): Promise<QmdStatus> {
     // qmd status has no --json flag; parse the plain text output.
-    const raw = await runQmd(this.binary, ['status']);
+    const raw = await runQmd(this.binary, [...this.ix(), 'status']);
     return parseStatusText(raw);
   }
 

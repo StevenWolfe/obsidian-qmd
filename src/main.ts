@@ -74,12 +74,13 @@ export default class QmdSearchPlugin extends Plugin {
       });
       return c;
     }
-    return new CliQmdClient(this.resolvedBinaryPath);
+    return new CliQmdClient(this.resolvedBinaryPath, this.settings.indexName);
   }
 
   private reindex(): void {
     const notice = new Notice('QMD: re-indexing collections…', 0);
-    execFile(this.resolvedBinaryPath, ['update'], { timeout: 600_000, env: buildEnv() }, (err) => {
+    const args = this.settings.indexName ? ['--index', this.settings.indexName, 'update'] : ['update'];
+    execFile(this.resolvedBinaryPath, args, { timeout: 600_000, env: buildEnv() }, (err) => {
       notice.hide();
       if (err) new Notice(`QMD: re-index error — ${err.message}`);
       else new Notice('QMD: re-index complete ✓');
