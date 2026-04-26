@@ -10,7 +10,7 @@ const path = require('path') as typeof import('path');
 import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import type QmdSearchPlugin from './main';
 import { type LogLevel, setLogLevel, log } from './util/log';
-import { buildEnv } from './util/env';
+import { buildEnv, resolveQmdBinary } from './util/env';
 
 export interface QmdSearchSettings {
   qmdBinaryPath: string;
@@ -61,21 +61,27 @@ export class QmdSettingTab extends PluginSettingTab {
 
     // Binary path
     const versionEl = containerEl.createEl('p', { cls: 'qmd-version-hint' });
+    // Show the currently resolved path when the setting is still the default
+    if (this.plugin.resolvedBinaryPath !== 'qmd' && this.plugin.settings.qmdBinaryPath === 'qmd') {
+      versionEl.setText(`resolved → ${this.plugin.resolvedBinaryPath}`);
+      versionEl.addClass('qmd-version-ok');
+    }
+    let binaryInputEl: HTMLInputElement;
     new Setting(containerEl)
       .setName('qmd binary path')
-      .setDesc('Path to the qmd executable. Leave as "qmd" to use PATH.')
+      .setDesc('Path to the qmd executable. Leave as "qmd" to auto-detect.')
       .addText((text) => {
+        binaryInputEl = text.inputEl;
         text
           .setPlaceholder('qmd')
           .setValue(this.plugin.settings.qmdBinaryPath)
           .onChange((value) => {
-            // update in-memory only; save + version check happen on blur
             this.plugin.settings.qmdBinaryPath = value;
           });
         text.inputEl.addEventListener('blur', async () => {
           await this.plugin.saveSettings();
           try {
-            const version = await runVersion(this.plugin.settings.qmdBinaryPath);
+            const version = await runVersion(this.plugin.resolvedBinaryPath);
             if (!versionEl.isConnected) return;
             versionEl.setText(`✓ ${version}`);
             versionEl.removeClass('qmd-version-error');
@@ -85,6 +91,39 @@ export class QmdSettingTab extends PluginSettingTab {
             versionEl.setText('✗ qmd not found or failed');
             versionEl.removeClass('qmd-version-ok');
             versionEl.addClass('qmd-version-error');
+          }
+        });
+      })
+      .addButton((btn) => {
+        btn.setButtonText('Auto-detect').onClick(async () => {
+          btn.setDisabled(true);
+          btn.setButtonText('Detecting…');
+          try {
+            const resolved = await resolveQmdBinary('qmd');
+            if (!versionEl.isConnected) return;
+            if (resolved !== 'qmd') {
+              binaryInputEl.value = resolved;
+              this.plugin.settings.qmdBinaryPath = resolved;
+              await this.plugin.saveSettings();
+              try {
+                const version = await runVersion(resolved);
+                versionEl.setText(`✓ ${version}`);
+                versionEl.removeClass('qmd-version-error');
+                versionEl.addClass('qmd-version-ok');
+              } catch {
+                versionEl.setText(`Found at ${resolved} but --version failed`);
+                versionEl.addClass('qmd-version-ok');
+              }
+            } else {
+              versionEl.setText('✗ Could not find qmd — set path manually');
+              versionEl.removeClass('qmd-version-ok');
+              versionEl.addClass('qmd-version-error');
+            }
+          } finally {
+            if (btn.buttonEl.isConnected) {
+              btn.setDisabled(false);
+              btn.setButtonText('Auto-detect');
+            }
           }
         });
       });
