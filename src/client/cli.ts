@@ -93,7 +93,7 @@ export class CliQmdClient implements QmdClient {
 
   async search(opts: SearchOptions): Promise<QmdResult[]> {
     const cmd = MODE_CMD[opts.mode];
-    const args: string[] = [cmd, opts.query, '--json'];
+    const args: string[] = [cmd, opts.query, '--json', '--index="lead-workspace"'];
 
     if (opts.collection) args.push('-c', opts.collection);
     if (opts.limit) args.push('-n', String(opts.limit));
