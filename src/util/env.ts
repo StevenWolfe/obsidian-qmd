@@ -1,5 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { execFile } = require('child_process') as typeof import('child_process');
+
+import { log } from './log';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const fs = require('fs') as typeof import('fs');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -65,12 +67,14 @@ export function initShellContext(hint = 'qmd'): Promise<string> {
     ? 'command -v qmd 2>/dev/null || which qmd 2>/dev/null; echo "===ENV==="; env'
     : 'echo "===ENV==="; env';
 
+  log.debug('initShellContext: shell=%s hint=%s', shell, hint);
   return new Promise((resolve) => {
     execFile(
       shell,
       ['-l', '-c', cmd],
       { timeout: 10_000, maxBuffer: 2 * 1024 * 1024 },
       (_err, stdout) => {
+        if (_err) log.warn('initShellContext shell error:', _err.message);
         const marker = stdout.indexOf('===ENV===');
         let resolvedBinary = hint;
 
@@ -82,14 +86,23 @@ export function initShellContext(hint = 'qmd'): Promise<string> {
             const eq = line.indexOf('=');
             if (eq > 0) env[line.slice(0, eq)] = line.slice(eq + 1);
           }
-          if (Object.keys(env).length > 5) _shellEnv = env;
+          const envCount = Object.keys(env).length;
+          if (envCount > 5) {
+            _shellEnv = env;
+            log.debug('initShellContext: captured %d env vars, PATH=%s', envCount, env.PATH?.slice(0, 120));
+          } else {
+            log.warn('initShellContext: env capture returned only %d vars — shell may have errored', envCount);
+          }
 
           // Parse binary path from section before the marker
           if (needsBinaryResolution) {
             const before = stdout.slice(0, marker).trim();
             const found = before.split('\n').find((l) => l.startsWith('/'));
             if (found) resolvedBinary = found.trim();
+            log.debug('initShellContext: shell resolved binary to:', resolvedBinary);
           }
+        } else {
+          log.warn('initShellContext: ===ENV=== marker not found in shell output');
         }
 
         // Fallback filesystem scan using the now-populated buildEnv() PATH
@@ -100,11 +113,17 @@ export function initShellContext(hint = 'qmd'): Promise<string> {
             try {
               fs.accessSync(candidate, fs.constants.X_OK);
               resolvedBinary = candidate;
+              log.debug('initShellContext: filesystem scan found binary at:', resolvedBinary);
               break;
             } catch { /* keep looking */ }
           }
         }
 
+        if (resolvedBinary === 'qmd') {
+          log.warn('initShellContext: qmd binary not found — will rely on PATH at exec time');
+        } else {
+          log.debug('initShellContext: resolved binary:', resolvedBinary);
+        }
         resolve(resolvedBinary);
       },
     );
