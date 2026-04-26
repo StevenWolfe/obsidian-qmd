@@ -26,6 +26,7 @@ const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
 const stripAnsi = (s: string) => s.replace(ANSI_RE, '');
 
 function runQmd(binary: string, args: string[]): Promise<string> {
+  log.debug('run:', binary, args.join(' '));
   return new Promise((resolve, reject) => {
     execFile(binary, args, { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, env: buildEnv() }, (err, stdout, stderr) => {
       if (err) {
@@ -35,6 +36,7 @@ function runQmd(binary: string, args: string[]): Promise<string> {
       } else {
         const cleanErr = stderr ? stripAnsi(stderr).trim() : '';
         if (cleanErr) log.warn('stderr:', cleanErr);
+        log.debug('stdout (%d bytes):', stdout.length, stdout.slice(0, 500));
         resolve(stdout);
       }
     });
@@ -42,11 +44,13 @@ function runQmd(binary: string, args: string[]): Promise<string> {
 }
 
 function parseStatusText(raw: string): QmdStatus {
+  log.debug('parseStatusText raw:\n', raw);
   const lines = raw.split('\n');
   const collections: QmdStatus['collections'] = [];
 
   const totalMatch = raw.match(/Total:\s+(\d+) files indexed/);
   const totalDocs = totalMatch ? parseInt(totalMatch[1], 10) : 0;
+  log.debug('totalMatch:', totalMatch?.[0] ?? '(none)');
 
   // Collection entries are indented 2 spaces followed by name + (qmd://...)
   // Child properties (Files:, Updated:) are indented 4+ spaces.
@@ -69,18 +73,23 @@ function parseStatusText(raw: string): QmdStatus {
       if (updMatch) lastIndexed = updMatch[1].trim();
     }
 
+    log.debug('collection parsed:', { name, docCount, lastIndexed });
     collections.push({ name, docCount, lastIndexed });
   }
 
-  return {
+  const result: QmdStatus = {
     healthy: true,
     message: `${totalDocs} doc${totalDocs !== 1 ? 's' : ''} indexed`,
     collections,
   };
+  log.debug('status result:', result);
+  return result;
 }
 
 export class CliQmdClient implements QmdClient {
-  constructor(private readonly binary: string = 'qmd') {}
+  constructor(private readonly binary: string = 'qmd') {
+    log.debug('CliQmdClient created, binary:', binary);
+  }
 
   async search(opts: SearchOptions): Promise<QmdResult[]> {
     const cmd = MODE_CMD[opts.mode];
@@ -90,10 +99,12 @@ export class CliQmdClient implements QmdClient {
     if (opts.limit) args.push('-n', String(opts.limit));
     if (opts.intent) args.push('--intent', opts.intent);
 
+    log.debug('search opts:', opts);
     const raw = await runQmd(this.binary, args);
     // Output is a bare JSON array, not {results: [...]}
     const parsed = JSON.parse(raw) as RawQmdResult[] | { results?: RawQmdResult[] };
     const items = Array.isArray(parsed) ? parsed : (parsed.results ?? []);
+    log.debug('search returned', items.length, 'results');
     return items.map(normalizeResult);
   }
 

@@ -3,7 +3,7 @@ const { execFile } = require('child_process') as typeof import('child_process');
 
 import { Notice, Plugin } from 'obsidian';
 import { DEFAULT_SETTINGS, QmdSearchSettings, QmdSettingTab } from './settings';
-import { setLogLevel } from './util/log';
+import { setLogLevel, log } from './util/log';
 import { buildEnv, initShellContext } from './util/env';
 import type { QmdClient } from './client/base';
 import { CliQmdClient } from './client/cli';
@@ -22,6 +22,7 @@ export default class QmdSearchPlugin extends Plugin {
   async onload(): Promise<void> {
     await this.loadSettings();
     this.resolvedBinaryPath = await initShellContext(this.settings.qmdBinaryPath);
+    log.debug('plugin loaded: binary=%s transport=%s', this.resolvedBinaryPath, this.settings.transportMode);
     this.client = this.buildClient();
 
     this.addCommand({

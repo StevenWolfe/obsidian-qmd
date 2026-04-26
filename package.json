@@ -1,6 +1,6 @@
 {
   "name": "qmd-search",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Obsidian plugin for qmd semantic search",
   "main": "main.js",
   "scripts": {
