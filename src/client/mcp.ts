@@ -145,7 +145,13 @@ export class McpQmdClient implements QmdClient {
               const content = json.result?.content;
               if (!content?.length) { resolve(null); return; }
               const textPart = content.find((c) => c.type === 'text');
-              resolve(textPart?.text ? JSON.parse(textPart.text) : null);
+              if (!textPart?.text) { resolve(null); return; }
+              try {
+                resolve(JSON.parse(textPart.text));
+              } catch (parseErr) {
+                log.error('MCP result JSON parse failed, raw text:', textPart.text);
+                reject(parseErr);
+              }
             } catch (err) {
               reject(err);
             }

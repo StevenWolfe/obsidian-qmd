@@ -46,8 +46,59 @@ function runVersion(binary: string): Promise<string> {
 }
 
 export class QmdSettingTab extends PluginSettingTab {
+  private statusEl: HTMLElement | null = null;
+
   constructor(app: App, private readonly plugin: QmdSearchPlugin) {
     super(app, plugin);
+  }
+
+  /** Fetch and render the qmd status into this.statusEl. Skips silently if
+   *  qmd was not resolved (binary missing) to avoid a redundant error. */
+  renderStatus(): void {
+    const el = this.statusEl;
+    if (!el?.isConnected) return;
+
+    if (this.plugin.resolvedBinaryPath === 'qmd') {
+      el.empty();
+      el.createEl('p', { text: 'qmd not found — set binary path above.', cls: 'qmd-muted' });
+      return;
+    }
+
+    el.empty();
+    el.createEl('p', { text: 'Checking…', cls: 'qmd-muted' });
+
+    this.plugin.client.status().then((s) => {
+      if (!el.isConnected) return;
+      el.empty();
+      const health = el.createDiv({ cls: 'qmd-status-health' });
+      health.createEl('span', {
+        text: s.healthy ? '✓ Healthy' : '✗ Unhealthy',
+        cls: s.healthy ? 'qmd-status-ok' : 'qmd-status-err',
+      });
+      if (s.message) health.createEl('span', { text: ` — ${s.message}`, cls: 'qmd-status-message' });
+
+      if (s.collections.length === 0) {
+        el.createEl('p', { text: 'No collections registered.', cls: 'qmd-muted' });
+        return;
+      }
+      const table = el.createEl('table', { cls: 'qmd-status-table' });
+      const head = table.createEl('thead').createEl('tr');
+      head.createEl('th', { text: 'Collection' });
+      head.createEl('th', { text: 'Docs' });
+      head.createEl('th', { text: 'Last indexed' });
+      const tbody = table.createEl('tbody');
+      for (const col of s.collections) {
+        const row = tbody.createEl('tr');
+        row.createEl('td', { text: col.name });
+        row.createEl('td', { text: String(col.docCount) });
+        row.createEl('td', { text: col.lastIndexed ?? '—' });
+      }
+    }).catch((err: Error) => {
+      log.error('status failed:', err.message);
+      if (!el.isConnected) return;
+      el.empty();
+      el.createEl('p', { text: `Status error: ${err.message}`, cls: 'qmd-error' });
+    });
   }
 
   display(): void {
@@ -92,6 +143,7 @@ export class QmdSettingTab extends PluginSettingTab {
             versionEl.removeClass('qmd-version-ok');
             versionEl.addClass('qmd-version-error');
           }
+          this.renderStatus();
         });
       })
       .addButton((btn) => {
@@ -114,6 +166,7 @@ export class QmdSettingTab extends PluginSettingTab {
                 versionEl.setText(`Found at ${resolved} but --version failed`);
                 versionEl.addClass('qmd-version-ok');
               }
+              this.renderStatus();
             } else {
               versionEl.setText('✗ Could not find qmd — set path manually');
               versionEl.removeClass('qmd-version-ok');
@@ -272,41 +325,13 @@ export class QmdSettingTab extends PluginSettingTab {
       );
 
     // Status summary
-    containerEl.createEl('h3', { text: 'Status', cls: 'qmd-section-heading' });
-    const statusEl = containerEl.createDiv({ cls: 'qmd-status-inline' });
-    statusEl.createEl('p', { text: 'Checking…', cls: 'qmd-muted' });
-
-    this.plugin.client.status().then((s) => {
-      if (!statusEl.isConnected) return;
-      statusEl.empty();
-      const health = statusEl.createDiv({ cls: 'qmd-status-health' });
-      health.createEl('span', {
-        text: s.healthy ? '✓ Healthy' : '✗ Unhealthy',
-        cls: s.healthy ? 'qmd-status-ok' : 'qmd-status-err',
-      });
-      if (s.message) health.createEl('span', { text: ` — ${s.message}`, cls: 'qmd-status-message' });
-
-      if (s.collections.length === 0) {
-        statusEl.createEl('p', { text: 'No collections registered.', cls: 'qmd-muted' });
-        return;
-      }
-      const table = statusEl.createEl('table', { cls: 'qmd-status-table' });
-      const head = table.createEl('thead').createEl('tr');
-      head.createEl('th', { text: 'Collection' });
-      head.createEl('th', { text: 'Docs' });
-      head.createEl('th', { text: 'Last indexed' });
-      const tbody = table.createEl('tbody');
-      for (const col of s.collections) {
-        const row = tbody.createEl('tr');
-        row.createEl('td', { text: col.name });
-        row.createEl('td', { text: String(col.docCount) });
-        row.createEl('td', { text: col.lastIndexed ?? '—' });
-      }
-    }).catch((err: Error) => {
-      log.error('status failed:', err.message);
-      if (!statusEl.isConnected) return;
-      statusEl.empty();
-      statusEl.createEl('p', { text: `Status error: ${err.message}`, cls: 'qmd-error' });
-    });
+    new Setting(containerEl)
+      .setName('Status')
+      .setHeading()
+      .addButton((btn) =>
+        btn.setButtonText('Refresh').onClick(() => this.renderStatus()),
+      );
+    this.statusEl = containerEl.createDiv({ cls: 'qmd-status-inline' });
+    this.renderStatus();
   }
 }
