@@ -105,6 +105,8 @@ export class CliQmdClient implements QmdClient {
     if (opts.collection) args.push('-c', opts.collection);
     if (opts.limit) args.push('-n', String(opts.limit));
     if (opts.intent) args.push('--intent', opts.intent);
+    if (opts.noRerank) args.push('--no-rerank');
+    if (opts.candidateLimit) args.push('-C', String(opts.candidateLimit));
 
     log.debug('search opts:', opts);
     const raw = await runQmd(this.binary, args);

@@ -133,6 +133,8 @@ export class SearchModal extends Modal {
       mode: this.activeMode,
       collection: this.collectionSelect.value || undefined,
       intent: this.intentInput.value.trim() || undefined,
+      noRerank: this.settings.noRerank || undefined,
+      candidateLimit: this.settings.candidateLimit || undefined,
     });
     const vaultFiles = this.searchVault(query);
 

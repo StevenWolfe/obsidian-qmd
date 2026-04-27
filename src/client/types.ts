@@ -61,4 +61,6 @@ export interface SearchOptions {
   collection?: string;
   intent?: string;
   limit?: number;
+  noRerank?: boolean;
+  candidateLimit?: number;
 }

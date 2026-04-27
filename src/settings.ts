@@ -19,6 +19,8 @@ export interface QmdSearchSettings {
   mcpPort: number;
   defaultCollection: string;
   defaultSearchMode: 'keyword' | 'semantic' | 'hybrid';
+  noRerank: boolean;
+  candidateLimit: number;
   logLevel: LogLevel;
 }
 
@@ -29,6 +31,8 @@ export const DEFAULT_SETTINGS: QmdSearchSettings = {
   mcpPort: 8181,
   defaultCollection: '',
   defaultSearchMode: 'hybrid',
+  noRerank: false,
+  candidateLimit: 0,
   logLevel: 'error',
 };
 
@@ -263,6 +267,34 @@ export class QmdSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings(false);
           });
       });
+
+    // Skip LLM reranking
+    new Setting(containerEl)
+      .setName('Skip LLM reranking')
+      .setDesc('Pass --no-rerank to qmd. Faster responses; BM25+vector fusion only. Applies to hybrid and semantic modes.')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.noRerank)
+          .onChange(async (value) => {
+            this.plugin.settings.noRerank = value;
+            await this.plugin.saveSettings(false);
+          }),
+      );
+
+    // Reranker candidate limit
+    new Setting(containerEl)
+      .setName('Reranker candidate limit')
+      .setDesc('Max candidates passed to the LLM reranker (-C flag). 0 = qmd default (~50). Lower = faster.')
+      .addText((text) =>
+        text
+          .setPlaceholder('0')
+          .setValue(this.plugin.settings.candidateLimit > 0 ? String(this.plugin.settings.candidateLimit) : '')
+          .onChange(async (value) => {
+            const n = parseInt(value, 10);
+            this.plugin.settings.candidateLimit = isNaN(n) || n < 0 ? 0 : n;
+            await this.plugin.saveSettings(false);
+          }),
+      );
 
     // Register vault as collection
     new Setting(containerEl)
