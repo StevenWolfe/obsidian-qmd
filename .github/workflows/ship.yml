@@ -12,7 +12,7 @@ on:
 
 jobs:
   ship:
-    name: Bump version and tag
+    name: Bump, build, and release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -25,6 +25,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+
+      - run: npm ci
 
       # ── Bump version ───────────────────────────────────────────────────────
       - name: Bump version numbers
@@ -59,7 +62,10 @@ jobs:
 
           echo "Bumped $CURRENT → $NEW"
 
-      # ── Commit & tag — pushing the tag triggers release.yml ────────────────
+      # ── Build ──────────────────────────────────────────────────────────────
+      - run: npm run build
+
+      # ── Commit & tag ───────────────────────────────────────────────────────
       - name: Commit and tag
         run: |
           git config user.name  "github-actions[bot]"
@@ -69,3 +75,21 @@ jobs:
           git tag "v${{ steps.bump.outputs.version }}"
           git push origin HEAD:main
           git push origin "v${{ steps.bump.outputs.version }}"
+
+      # ── Package & publish ──────────────────────────────────────────────────
+      - name: Package plugin zip
+        run: |
+          mkdir -p qmd-search
+          cp main.js manifest.json styles.css qmd-search/
+          zip -r qmd-search.zip qmd-search/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.bump.outputs.version }}
+          name: v${{ steps.bump.outputs.version }}
+          files: |
+            qmd-search.zip
+            main.js
+            manifest.json
+            styles.css
