@@ -11,7 +11,7 @@ import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import type QmdSearchPlugin from './main';
 import { type LogLevel, setLogLevel, log } from './util/log';
 import { buildEnv, resolveQmdBinary } from './util/env';
-import { loadCollectionNames, loadIndexNamesAsync } from './util/config';
+import { loadCollectionNames } from './util/config';
 
 export interface QmdSearchSettings {
   qmdBinaryPath: string;
@@ -203,32 +203,6 @@ export class QmdSettingTab extends PluginSettingTab {
         });
       });
 
-    // ── Index (dropdown) ─────────────────────────────────────
-    let indexSelectEl: HTMLSelectElement;
-    new Setting(containerEl)
-      .setName('Index')
-      .setDesc('Named qmd index to use (--index flag). "default" uses the qmd default.')
-      .addDropdown((dd) => {
-        indexSelectEl = dd.selectEl;
-        dd.addOption('', 'default');
-        if (this.plugin.settings.indexName) dd.addOption(this.plugin.settings.indexName, this.plugin.settings.indexName);
-        dd.setValue(this.plugin.settings.indexName);
-        dd.onChange(async (value) => {
-          this.plugin.settings.indexName = value;
-          await this.plugin.saveSettings();
-          this.renderStatus();
-        });
-      });
-    // Async-populate index options
-    loadIndexNamesAsync(this.plugin.resolvedBinaryPath, buildEnv()).then((names) => {
-      if (!indexSelectEl?.isConnected || names.length === 0) return;
-      populateSelect(
-        indexSelectEl,
-        [{ value: '', label: 'default' }, ...names.map((n) => ({ value: n, label: n }))],
-        this.plugin.settings.indexName,
-      );
-    }).catch(() => { /* ignore */ });
-
     // ── Default collection (dropdown) ────────────────────────
     const collectionNames = loadCollectionNames();
     let collectionSelectEl: HTMLSelectElement;
@@ -376,6 +350,20 @@ export class QmdSettingTab extends PluginSettingTab {
     const advancedEl = containerEl.createEl('details', { cls: 'qmd-advanced-section' });
     if (wasAdvancedOpen) advancedEl.open = true;
     advancedEl.createEl('summary', { text: 'Advanced', cls: 'qmd-advanced-summary' });
+
+    new Setting(advancedEl)
+      .setName('Index name')
+      .setDesc('Named index to use (--index flag). Leave blank for the qmd default ("index").')
+      .addText((text) => {
+        text
+          .setPlaceholder('index')
+          .setValue(this.plugin.settings.indexName)
+          .onChange((value) => { this.plugin.settings.indexName = value.trim(); });
+        text.inputEl.addEventListener('blur', async () => {
+          await this.plugin.saveSettings();
+          this.renderStatus();
+        });
+      });
 
     new Setting(advancedEl)
       .setName('Transport mode')
