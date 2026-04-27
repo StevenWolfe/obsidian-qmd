@@ -69,4 +69,9 @@ Electron's renderer process strips the user's shell PATH. Two functions work tog
 
 ### Releases
 
-Tag pushes are blocked in web sessions. Releases are triggered by pushing any file to the `do-release` branch, which fires `.github/workflows/release-from-branch.yml`. That workflow checks out `main`, builds, reads the version from `manifest.json`, and creates a GitHub release via `softprops/action-gh-release@v2`. To release: bump `manifest.json` and `versions.json`, commit + push to `main`, then push `.release-trigger` (content: `<version>\n`) to `do-release` via `mcp__github__push_files`.
+Two workflows handle releases:
+
+- **`ship.yml`** (`workflow_dispatch`) — the primary release path. Go to GitHub → Actions → Ship Release → Run workflow → pick `patch` / `minor` / `major`. The workflow bumps `manifest.json` and `versions.json`, commits to `main`, and pushes a `v*` tag. The tag push triggers `release.yml`.
+- **`release.yml`** (on `push: tags: v*`) — builds the plugin, packages a zip, and creates the GitHub release with all assets attached. Also fires if a tag is pushed manually from a local machine.
+
+To release from anywhere (phone, web, local): use the Ship Release workflow dispatch.
