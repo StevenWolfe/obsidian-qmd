@@ -180,6 +180,7 @@ export class McpQmdClient implements QmdClient {
     if (opts.limit) args['limit'] = opts.limit;
     if (opts.noRerank) args['no_rerank'] = true;
     if (opts.candidateLimit) args['candidates'] = opts.candidateLimit;
+    if (opts.minScore) args['min_score'] = opts.minScore;
 
     const result = (await this.rpc('query', args)) as RawQmdResult[] | { results?: RawQmdResult[] } | null;
     const items = Array.isArray(result) ? result : (result?.results ?? []);

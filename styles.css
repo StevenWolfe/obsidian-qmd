@@ -237,6 +237,38 @@
 .qmd-status-table th { color: var(--text-muted); font-weight: 500; }
 
 /* ── Settings tab ─────────────────────────────────────────── */
+.qmd-advanced-section {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  margin: 12px 0 4px;
+  padding: 0 12px;
+}
+
+.qmd-advanced-summary {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 10px 0;
+  user-select: none;
+  list-style: none;
+}
+
+.qmd-advanced-summary::-webkit-details-marker { display: none; }
+
+.qmd-advanced-summary::before {
+  content: '▸  ';
+  font-size: 0.8em;
+}
+
+.qmd-advanced-section[open] > .qmd-advanced-summary::before {
+  content: '▾  ';
+}
+
+.qmd-advanced-section .setting-item:last-child {
+  border-bottom: none;
+}
+
 .qmd-section-heading {
   font-size: 0.9em;
   font-weight: 600;

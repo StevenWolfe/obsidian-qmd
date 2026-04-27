@@ -107,6 +107,7 @@ export class CliQmdClient implements QmdClient {
     if (opts.intent) args.push('--intent', opts.intent);
     if (opts.noRerank) args.push('--no-rerank');
     if (opts.candidateLimit) args.push('-C', String(opts.candidateLimit));
+    if (opts.minScore) args.push('--min-score', String(opts.minScore));
 
     log.debug('search opts:', opts);
     const raw = await runQmd(this.binary, args);

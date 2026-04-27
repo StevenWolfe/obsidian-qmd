@@ -21,6 +21,7 @@ export interface QmdSearchSettings {
   defaultSearchMode: 'keyword' | 'semantic' | 'hybrid';
   noRerank: boolean;
   candidateLimit: number;
+  minScore: number;
   logLevel: LogLevel;
 }
 
@@ -33,6 +34,7 @@ export const DEFAULT_SETTINGS: QmdSearchSettings = {
   defaultSearchMode: 'hybrid',
   noRerank: false,
   candidateLimit: 0,
+  minScore: 0,
   logLevel: 'error',
 };
 
@@ -109,6 +111,9 @@ export class QmdSettingTab extends PluginSettingTab {
 
   display(): void {
     const { containerEl } = this;
+    // Preserve open state across re-renders (e.g. transport mode change)
+    const wasAdvancedOpen =
+      (containerEl.querySelector('.qmd-advanced-section') as HTMLDetailsElement | null)?.open ?? false;
     containerEl.empty();
 
     containerEl.createEl('p', {
@@ -116,9 +121,8 @@ export class QmdSettingTab extends PluginSettingTab {
       cls: 'qmd-plugin-version',
     });
 
-    // Binary path
+    // ── Binary path ──────────────────────────────────────────
     const versionEl = containerEl.createEl('p', { cls: 'qmd-version-hint' });
-    // Show the currently resolved path when the setting is still the default
     if (this.plugin.resolvedBinaryPath !== 'qmd' && this.plugin.settings.qmdBinaryPath === 'qmd') {
       versionEl.setText(`resolved → ${this.plugin.resolvedBinaryPath}`);
       versionEl.addClass('qmd-version-ok');
@@ -132,9 +136,7 @@ export class QmdSettingTab extends PluginSettingTab {
         text
           .setPlaceholder('qmd')
           .setValue(this.plugin.settings.qmdBinaryPath)
-          .onChange((value) => {
-            this.plugin.settings.qmdBinaryPath = value;
-          });
+          .onChange((value) => { this.plugin.settings.qmdBinaryPath = value; });
         text.inputEl.addEventListener('blur', async () => {
           await this.plugin.saveSettings();
           try {
@@ -187,58 +189,7 @@ export class QmdSettingTab extends PluginSettingTab {
         });
       });
 
-    // Index name
-    new Setting(containerEl)
-      .setName('Index name')
-      .setDesc('Named index to use (--index flag). Leave blank for the qmd default ("index").')
-      .addText((text) => {
-        text
-          .setPlaceholder('index')
-          .setValue(this.plugin.settings.indexName)
-          .onChange((value) => {
-            this.plugin.settings.indexName = value.trim();
-          });
-        text.inputEl.addEventListener('blur', async () => {
-          await this.plugin.saveSettings();
-          this.renderStatus();
-        });
-      });
-
-    // Transport mode
-    new Setting(containerEl)
-      .setName('Transport mode')
-      .setDesc('CLI spawns qmd per-query; MCP-HTTP connects to a persistent daemon.')
-      .addDropdown((dd) => {
-        dd.addOption('cli', 'CLI (default)')
-          .addOption('mcp-http', 'MCP HTTP daemon')
-          .setValue(this.plugin.settings.transportMode)
-          .onChange(async (value: 'cli' | 'mcp-http') => {
-            this.plugin.settings.transportMode = value;
-            await this.plugin.saveSettings();
-            this.display(); // re-render to show/hide port field
-          });
-      });
-
-    // MCP port — only shown for mcp-http mode
-    if (this.plugin.settings.transportMode === 'mcp-http') {
-      new Setting(containerEl)
-        .setName('MCP daemon port')
-        .setDesc('Port the qmd MCP HTTP daemon listens on.')
-        .addText((text) =>
-          text
-            .setPlaceholder('8181')
-            .setValue(String(this.plugin.settings.mcpPort))
-            .onChange(async (value) => {
-              const port = parseInt(value, 10);
-              if (!isNaN(port)) {
-                this.plugin.settings.mcpPort = port;
-                await this.plugin.saveSettings();
-              }
-            }),
-        );
-    }
-
-    // Default collection
+    // ── Default collection ───────────────────────────────────
     new Setting(containerEl)
       .setName('Default collection')
       .setDesc('Pre-selected collection in the search modal. Leave blank for all.')
@@ -246,15 +197,13 @@ export class QmdSettingTab extends PluginSettingTab {
         text
           .setPlaceholder('')
           .setValue(this.plugin.settings.defaultCollection)
-          .onChange((value) => {
-            this.plugin.settings.defaultCollection = value;
-          });
+          .onChange((value) => { this.plugin.settings.defaultCollection = value; });
         text.inputEl.addEventListener('blur', async () => {
           await this.plugin.saveSettings(false);
         });
       });
 
-    // Default search mode
+    // ── Default search mode ──────────────────────────────────
     new Setting(containerEl)
       .setName('Default search mode')
       .addDropdown((dd) => {
@@ -268,35 +217,7 @@ export class QmdSettingTab extends PluginSettingTab {
           });
       });
 
-    // Skip LLM reranking
-    new Setting(containerEl)
-      .setName('Skip LLM reranking')
-      .setDesc('Pass --no-rerank to qmd. Faster responses; BM25+vector fusion only. Applies to hybrid and semantic modes.')
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.noRerank)
-          .onChange(async (value) => {
-            this.plugin.settings.noRerank = value;
-            await this.plugin.saveSettings(false);
-          }),
-      );
-
-    // Reranker candidate limit
-    new Setting(containerEl)
-      .setName('Reranker candidate limit')
-      .setDesc('Max candidates passed to the LLM reranker (-C flag). 0 = qmd default (~50). Lower = faster.')
-      .addText((text) =>
-        text
-          .setPlaceholder('0')
-          .setValue(this.plugin.settings.candidateLimit > 0 ? String(this.plugin.settings.candidateLimit) : '')
-          .onChange(async (value) => {
-            const n = parseInt(value, 10);
-            this.plugin.settings.candidateLimit = isNaN(n) || n < 0 ? 0 : n;
-            await this.plugin.saveSettings(false);
-          }),
-      );
-
-    // Register vault as collection
+    // ── Register vault as collection ─────────────────────────
     new Setting(containerEl)
       .setName('Register vault as collection')
       .setDesc('Index this vault with qmd so it appears in search.')
@@ -335,7 +256,7 @@ export class QmdSettingTab extends PluginSettingTab {
         });
       });
 
-    // Open index config
+    // ── Open index config ────────────────────────────────────
     new Setting(containerEl)
       .setName('Open index config')
       .setDesc('Open ~/.config/qmd/index.yml in the system default app.')
@@ -357,8 +278,98 @@ export class QmdSettingTab extends PluginSettingTab {
         });
       });
 
-    // Log level
-    new Setting(containerEl)
+    // ── Advanced (collapsible) ───────────────────────────────
+    const advancedEl = containerEl.createEl('details', { cls: 'qmd-advanced-section' });
+    if (wasAdvancedOpen) advancedEl.open = true;
+    advancedEl.createEl('summary', { text: 'Advanced', cls: 'qmd-advanced-summary' });
+
+    new Setting(advancedEl)
+      .setName('Index name')
+      .setDesc('Named index to use (--index flag). Leave blank for the qmd default ("index").')
+      .addText((text) => {
+        text
+          .setPlaceholder('index')
+          .setValue(this.plugin.settings.indexName)
+          .onChange((value) => { this.plugin.settings.indexName = value.trim(); });
+        text.inputEl.addEventListener('blur', async () => {
+          await this.plugin.saveSettings();
+          this.renderStatus();
+        });
+      });
+
+    new Setting(advancedEl)
+      .setName('Transport mode')
+      .setDesc('CLI spawns qmd per-query; MCP-HTTP connects to a persistent daemon.')
+      .addDropdown((dd) => {
+        dd.addOption('cli', 'CLI (default)')
+          .addOption('mcp-http', 'MCP HTTP daemon')
+          .setValue(this.plugin.settings.transportMode)
+          .onChange(async (value: 'cli' | 'mcp-http') => {
+            this.plugin.settings.transportMode = value;
+            await this.plugin.saveSettings();
+            this.display();
+          });
+      });
+
+    if (this.plugin.settings.transportMode === 'mcp-http') {
+      new Setting(advancedEl)
+        .setName('MCP daemon port')
+        .setDesc('Port the qmd MCP HTTP daemon listens on.')
+        .addText((text) =>
+          text
+            .setPlaceholder('8181')
+            .setValue(String(this.plugin.settings.mcpPort))
+            .onChange(async (value) => {
+              const port = parseInt(value, 10);
+              if (!isNaN(port)) {
+                this.plugin.settings.mcpPort = port;
+                await this.plugin.saveSettings();
+              }
+            }),
+        );
+    }
+
+    new Setting(advancedEl)
+      .setName('Skip LLM reranking')
+      .setDesc('Pass --no-rerank to qmd. Faster responses; BM25+vector fusion only. Applies to hybrid and semantic modes.')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.noRerank)
+          .onChange(async (value) => {
+            this.plugin.settings.noRerank = value;
+            await this.plugin.saveSettings(false);
+          }),
+      );
+
+    new Setting(advancedEl)
+      .setName('Reranker candidate limit')
+      .setDesc('Max candidates passed to the LLM reranker (-C flag). 0 = qmd default (~40). Lower = faster.')
+      .addText((text) =>
+        text
+          .setPlaceholder('0')
+          .setValue(this.plugin.settings.candidateLimit > 0 ? String(this.plugin.settings.candidateLimit) : '')
+          .onChange(async (value) => {
+            const n = parseInt(value, 10);
+            this.plugin.settings.candidateLimit = isNaN(n) || n < 0 ? 0 : n;
+            await this.plugin.saveSettings(false);
+          }),
+      );
+
+    new Setting(advancedEl)
+      .setName('Minimum score')
+      .setDesc('Filter results below this similarity score (--min-score). 0 = disabled. Typical range: 0.1–0.5.')
+      .addText((text) =>
+        text
+          .setPlaceholder('0')
+          .setValue(this.plugin.settings.minScore > 0 ? String(this.plugin.settings.minScore) : '')
+          .onChange(async (value) => {
+            const n = parseFloat(value);
+            this.plugin.settings.minScore = isNaN(n) || n < 0 ? 0 : n;
+            await this.plugin.saveSettings(false);
+          }),
+      );
+
+    new Setting(advancedEl)
       .setName('Log level')
       .setDesc('Controls what qmd plugin output appears in the console / --enable-logging file.')
       .addDropdown((dd) =>
@@ -375,7 +386,7 @@ export class QmdSettingTab extends PluginSettingTab {
           }),
       );
 
-    // Status summary
+    // ── Status ───────────────────────────────────────────────
     new Setting(containerEl)
       .setName('Status')
       .setHeading()

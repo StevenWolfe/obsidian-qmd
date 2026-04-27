@@ -63,4 +63,5 @@ export interface SearchOptions {
   limit?: number;
   noRerank?: boolean;
   candidateLimit?: number;
+  minScore?: number;
 }
