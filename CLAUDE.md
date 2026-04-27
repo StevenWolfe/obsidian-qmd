@@ -22,8 +22,8 @@ VAULT_PATH=~/path/to/vault npm run deploy  # copy main.js + manifest.json + styl
 
 All `qmd` interaction is behind a `QmdClient` interface (`src/client/base.ts`). The plugin instantiates one of two concrete implementations based on the `transportMode` setting, and swaps the instance if settings change.
 
-- **`CliQmdClient`** (`src/client/cli.ts`) — uses `execFile` (not `spawn`) per query. Buffers full stdout before JSON parsing. Mode→command mapping: `keyword`→`search`, `semantic`→`vsearch`, `hybrid`→`query`. Strips ANSI escape sequences from error messages (qmd emits cursor-hide/show codes when it thinks it's in a TTY). `qmd status` has no `--json` flag; its plain-text output is parsed by `parseStatusText()`. `dispose()` is a no-op.
-- **`McpQmdClient`** (`src/client/mcp.ts`) — uses Node's `http` module (not `fetch`) to send JSON-RPC 2.0 POSTs to `http://localhost:{port}/mcp`. On `init()`, checks `~/.cache/qmd/mcp.pid`; if alive reuses it, otherwise spawns `qmd mcp --http` and TCP-polls until port accepts connections (15 s timeout via `waitForEndpoint`). Performs an MCP `initialize` handshake to obtain a session ID, which is sent as `mcp-session-id` header on all subsequent calls. On `dispose()`, kills the daemon only if this instance spawned it.
+- **`CliQmdClient`** (`src/client/cli.ts`) — uses `execFile` (not `spawn`) per query. Buffers full stdout before JSON parsing. Mode→command mapping: `keyword`→`search`, `semantic`→`vsearch`, `hybrid`→`query`. Strips ANSI escape sequences from error messages (qmd emits cursor-hide/show codes when it thinks it's in a TTY). `qmd status` has no `--json` flag; its plain-text output is parsed by `parseStatusText()`. `dispose()` is a no-op. Supports optional `--index <name>` (from `indexName` setting), `--no-rerank`, `-C <n>`, and `--min-score <f>` flags via `SearchOptions`.
+- **`McpQmdClient`** (`src/client/mcp.ts`) — uses Node's `http` module (not `fetch`) to send JSON-RPC 2.0 POSTs to `http://localhost:{port}/mcp`. On `init()`, checks `~/.cache/qmd/mcp.pid`; if alive reuses it, otherwise spawns `qmd mcp --http` and TCP-polls until port accepts connections (15 s timeout via `waitForEndpoint`). Performs an MCP `initialize` handshake to obtain a session ID, which is sent as `mcp-session-id` header on all subsequent calls. On `dispose()`, kills the daemon only if this instance spawned it. Passes `no_rerank`, `candidates`, and `min_score` fields in the RPC payload when set.
 
 ### Key data flows
 
@@ -38,7 +38,15 @@ All `qmd` interaction is behind a `QmdClient` interface (`src/client/base.ts`). 
 
 ### Settings (`src/settings.ts`)
 
-`QmdSearchSettings` is persisted via Obsidian's `loadData/saveData`. `saveSettings(rebuildClient)` accepts a boolean to skip client teardown for non-transport changes (e.g. default collection). `QmdSettingTab.display()` re-renders itself after transport mode changes to show/hide the port field.
+`QmdSearchSettings` is persisted via Obsidian's `loadData/saveData`. `saveSettings(rebuildClient)` accepts a boolean to skip client teardown for non-transport changes (e.g. default collection, search flags).
+
+`QmdSettingTab.display()` renders two tiers:
+- **Always visible**: binary path (+ Auto-detect button), default collection, default search mode, register vault, open index config, status.
+- **Collapsible `<details>` Advanced section**: index name (`--index`), transport mode, MCP port (conditional), skip reranking (`--no-rerank`), reranker candidate limit (`-C`), minimum score (`--min-score`), log level.
+
+The open/closed state of the Advanced section is read from the existing DOM before `containerEl.empty()` and re-applied after, so transport mode changes don't collapse it.
+
+`SearchOptions` (`src/client/types.ts`) carries: `query`, `mode`, `collection`, `intent`, `limit`, `noRerank`, `candidateLimit`, `minScore`.
 
 ### Node built-ins
 
@@ -46,7 +54,10 @@ All Node builtins (`child_process`, `fs`, `os`, `path`, `http`, `net`) are loade
 
 ### PATH resolution (`src/util/env.ts`)
 
-Electron's renderer process strips the user's shell PATH. `buildEnv()` reconstructs a PATH that includes NVM-managed node bin dirs, `~/.local/bin`, `~/.npm-global/bin`, and standard system paths. All `execFile`/`spawn` calls pass `{ env: buildEnv() }`.
+Electron's renderer process strips the user's shell PATH. Two functions work together:
+
+- **`initShellContext(hint)`** — called once at plugin load (and on binary path changes). Spawns the user's login shell (`$SHELL -l -c '...'`) with a combined command that (a) runs `command -v qmd` to resolve the binary path and (b) prints the full environment after an `===ENV===` marker. Parses the output to populate `_shellEnv` (module-level cache) and return the resolved binary path. Falls back to a filesystem scan over `buildEnv()`'s PATH if the shell invocation fails. Exported as `resolveQmdBinary` for backward compatibility.
+- **`buildEnv()`** — builds the env object passed to all `execFile`/`spawn` calls. Uses `_shellEnv` as the base when available (so conda, virtualenv, pyenv, NVM variables are all present), otherwise falls back to `process.env`. Augments PATH with Homebrew (`/opt/homebrew/bin`), Volta (`~/.volta/bin`), fnm (`$FNM_MULTISHELL_PATH`), NVM-managed node dirs, `~/.local/bin`, `~/.npm-global/bin`, MacPorts, and standard system paths.
 
 ### Collection name discovery
 
@@ -55,3 +66,7 @@ Electron's renderer process strips the user's shell PATH. `buildEnv()` reconstru
 ### Logging
 
 `src/util/log.ts` exports a `log` object (`log.error`, `log.warn`, `log.debug`) gated by a `LogLevel` setting (`off` | `error` | `warn` | `debug`). Default level is `error`. `setLogLevel()` is called from `loadSettings` and `saveSettings`.
+
+### Releases
+
+Tag pushes are blocked in web sessions. Releases are triggered by pushing any file to the `do-release` branch, which fires `.github/workflows/release-from-branch.yml`. That workflow checks out `main`, builds, reads the version from `manifest.json`, and creates a GitHub release via `softprops/action-gh-release@v2`. To release: bump `manifest.json` and `versions.json`, commit + push to `main`, then push `.release-trigger` (content: `<version>\n`) to `do-release` via `mcp__github__push_files`.
