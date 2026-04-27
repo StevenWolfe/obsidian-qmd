@@ -11,6 +11,7 @@ import { App, Notice, PluginSettingTab, Setting } from 'obsidian';
 import type QmdSearchPlugin from './main';
 import { type LogLevel, setLogLevel, log } from './util/log';
 import { buildEnv, resolveQmdBinary } from './util/env';
+import { loadCollectionNames, loadIndexNamesAsync } from './util/config';
 
 export interface QmdSearchSettings {
   qmdBinaryPath: string;
@@ -39,8 +40,6 @@ export const DEFAULT_SETTINGS: QmdSearchSettings = {
 };
 
 function runVersion(binary: string): Promise<string> {
-  // For path-like strings, verify existence before spawning — spawning a
-  // non-existent file in Electron's renderer corrupts IPC channel cleanup.
   if (!binary.trim()) return Promise.reject(new Error('empty path'));
   if ((binary.includes('/') || binary.includes('\\')) && !fs.existsSync(binary)) {
     return Promise.reject(new Error('file not found'));
@@ -53,6 +52,24 @@ function runVersion(binary: string): Promise<string> {
   });
 }
 
+/** Populate a <select> element with options, restoring the current value. */
+function populateSelect(sel: HTMLSelectElement, options: { value: string; label: string }[], current: string): void {
+  const allValues = options.map((o) => o.value);
+  while (sel.options.length) sel.remove(0);
+  for (const { value, label } of options) {
+    const opt = document.createElement('option');
+    opt.value = value; opt.text = label;
+    sel.add(opt);
+  }
+  // If saved value isn't in the list, add it so it doesn't disappear
+  if (current && !allValues.includes(current)) {
+    const opt = document.createElement('option');
+    opt.value = current; opt.text = current;
+    sel.add(opt);
+  }
+  sel.value = current;
+}
+
 export class QmdSettingTab extends PluginSettingTab {
   private statusEl: HTMLElement | null = null;
 
@@ -60,8 +77,6 @@ export class QmdSettingTab extends PluginSettingTab {
     super(app, plugin);
   }
 
-  /** Fetch and render the qmd status into this.statusEl. Skips silently if
-   *  qmd was not resolved (binary missing) to avoid a redundant error. */
   renderStatus(): void {
     const el = this.statusEl;
     if (!el?.isConnected) return;
@@ -111,7 +126,6 @@ export class QmdSettingTab extends PluginSettingTab {
 
   display(): void {
     const { containerEl } = this;
-    // Preserve open state across re-renders (e.g. transport mode change)
     const wasAdvancedOpen =
       (containerEl.querySelector('.qmd-advanced-section') as HTMLDetailsElement | null)?.open ?? false;
     containerEl.empty();
@@ -189,19 +203,61 @@ export class QmdSettingTab extends PluginSettingTab {
         });
       });
 
-    // ── Default collection ───────────────────────────────────
+    // ── Index (dropdown) ─────────────────────────────────────
+    let indexSelectEl: HTMLSelectElement;
+    new Setting(containerEl)
+      .setName('Index')
+      .setDesc('Named qmd index to use (--index flag). "default" uses the qmd default.')
+      .addDropdown((dd) => {
+        indexSelectEl = dd.selectEl;
+        dd.addOption('', 'default');
+        if (this.plugin.settings.indexName) dd.addOption(this.plugin.settings.indexName, this.plugin.settings.indexName);
+        dd.setValue(this.plugin.settings.indexName);
+        dd.onChange(async (value) => {
+          this.plugin.settings.indexName = value;
+          await this.plugin.saveSettings();
+          this.renderStatus();
+        });
+      });
+    // Async-populate index options
+    loadIndexNamesAsync(this.plugin.resolvedBinaryPath, buildEnv()).then((names) => {
+      if (!indexSelectEl?.isConnected || names.length === 0) return;
+      populateSelect(
+        indexSelectEl,
+        [{ value: '', label: 'default' }, ...names.map((n) => ({ value: n, label: n }))],
+        this.plugin.settings.indexName,
+      );
+    }).catch(() => { /* ignore */ });
+
+    // ── Default collection (dropdown) ────────────────────────
+    const collectionNames = loadCollectionNames();
+    let collectionSelectEl: HTMLSelectElement;
     new Setting(containerEl)
       .setName('Default collection')
-      .setDesc('Pre-selected collection in the search modal. Leave blank for all.')
-      .addText((text) => {
-        text
-          .setPlaceholder('')
-          .setValue(this.plugin.settings.defaultCollection)
-          .onChange((value) => { this.plugin.settings.defaultCollection = value; });
-        text.inputEl.addEventListener('blur', async () => {
+      .setDesc('Pre-selected collection in the search modal. "All" searches every collection.')
+      .addDropdown((dd) => {
+        collectionSelectEl = dd.selectEl;
+        dd.addOption('', 'All collections');
+        for (const name of collectionNames) dd.addOption(name, name);
+        if (this.plugin.settings.defaultCollection && !collectionNames.includes(this.plugin.settings.defaultCollection)) {
+          dd.addOption(this.plugin.settings.defaultCollection, this.plugin.settings.defaultCollection);
+        }
+        dd.setValue(this.plugin.settings.defaultCollection);
+        dd.onChange(async (value) => {
+          this.plugin.settings.defaultCollection = value;
           await this.plugin.saveSettings(false);
         });
       });
+    // Keep the collection list fresh from config
+    void (async () => {
+      const names = loadCollectionNames();
+      if (!collectionSelectEl?.isConnected || names.length === 0) return;
+      populateSelect(
+        collectionSelectEl,
+        [{ value: '', label: 'All collections' }, ...names.map((n) => ({ value: n, label: n }))],
+        this.plugin.settings.defaultCollection,
+      );
+    })();
 
     // ── Default search mode ──────────────────────────────────
     new Setting(containerEl)
@@ -216,6 +272,43 @@ export class QmdSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings(false);
           });
       });
+
+    // ── Index management ─────────────────────────────────────
+    new Setting(containerEl).setName('Index').setHeading();
+    this.statusEl = containerEl.createDiv({ cls: 'qmd-status-inline' });
+    this.renderStatus();
+
+    const actionRow = containerEl.createDiv({ cls: 'qmd-action-row' });
+
+    const reindexBtn = actionRow.createEl('button', { text: 'Re-index', cls: 'mod-cta' });
+    reindexBtn.addEventListener('click', async () => {
+      reindexBtn.disabled = true;
+      reindexBtn.textContent = 'Re-indexing…';
+      await this.plugin.reindex();
+      if (reindexBtn.isConnected) {
+        reindexBtn.disabled = false;
+        reindexBtn.textContent = 'Re-index';
+      }
+      this.renderStatus();
+    });
+
+    const embedBtn = actionRow.createEl('button', { text: 'Embed' });
+    embedBtn.addEventListener('click', async () => {
+      embedBtn.disabled = true;
+      embedBtn.textContent = 'Embedding…';
+      await this.plugin.embed();
+      if (embedBtn.isConnected) {
+        embedBtn.disabled = false;
+        embedBtn.textContent = 'Embed';
+      }
+      this.renderStatus();
+    });
+
+    const refreshBtn = actionRow.createEl('button', { text: 'Refresh' });
+    refreshBtn.addEventListener('click', () => {
+      this.renderStatus();
+      this.plugin.refreshStatusBar();
+    });
 
     // ── Register vault as collection ─────────────────────────
     new Setting(containerEl)
@@ -250,6 +343,7 @@ export class QmdSettingTab extends PluginSettingTab {
             });
 
             new Notice(`QMD: vault registered as "${name}" ✓`);
+            this.renderStatus();
           } catch (err) {
             new Notice(`QMD: registration failed — ${(err as Error).message}`);
           }
@@ -282,20 +376,6 @@ export class QmdSettingTab extends PluginSettingTab {
     const advancedEl = containerEl.createEl('details', { cls: 'qmd-advanced-section' });
     if (wasAdvancedOpen) advancedEl.open = true;
     advancedEl.createEl('summary', { text: 'Advanced', cls: 'qmd-advanced-summary' });
-
-    new Setting(advancedEl)
-      .setName('Index name')
-      .setDesc('Named index to use (--index flag). Leave blank for the qmd default ("index").')
-      .addText((text) => {
-        text
-          .setPlaceholder('index')
-          .setValue(this.plugin.settings.indexName)
-          .onChange((value) => { this.plugin.settings.indexName = value.trim(); });
-        text.inputEl.addEventListener('blur', async () => {
-          await this.plugin.saveSettings();
-          this.renderStatus();
-        });
-      });
 
     new Setting(advancedEl)
       .setName('Transport mode')
@@ -331,7 +411,7 @@ export class QmdSettingTab extends PluginSettingTab {
 
     new Setting(advancedEl)
       .setName('Skip LLM reranking')
-      .setDesc('Pass --no-rerank to qmd. Faster responses; BM25+vector fusion only. Applies to hybrid and semantic modes.')
+      .setDesc('Pass --no-rerank to qmd. Faster responses; BM25+vector fusion only.')
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.noRerank)
@@ -343,7 +423,7 @@ export class QmdSettingTab extends PluginSettingTab {
 
     new Setting(advancedEl)
       .setName('Reranker candidate limit')
-      .setDesc('Max candidates passed to the LLM reranker (-C flag). 0 = qmd default (~40). Lower = faster.')
+      .setDesc('Max candidates passed to the LLM reranker (-C flag). 0 = qmd default (~40).')
       .addText((text) =>
         text
           .setPlaceholder('0')
@@ -357,7 +437,7 @@ export class QmdSettingTab extends PluginSettingTab {
 
     new Setting(advancedEl)
       .setName('Minimum score')
-      .setDesc('Filter results below this similarity score (--min-score). 0 = disabled. Typical range: 0.1–0.5.')
+      .setDesc('Filter results below this similarity score (--min-score). 0 = disabled.')
       .addText((text) =>
         text
           .setPlaceholder('0')
@@ -371,7 +451,7 @@ export class QmdSettingTab extends PluginSettingTab {
 
     new Setting(advancedEl)
       .setName('Log level')
-      .setDesc('Controls what qmd plugin output appears in the console / --enable-logging file.')
+      .setDesc('Controls what qmd plugin output appears in the console.')
       .addDropdown((dd) =>
         dd
           .addOption('off',   'Off')
@@ -385,15 +465,5 @@ export class QmdSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings(false);
           }),
       );
-
-    // ── Status ───────────────────────────────────────────────
-    new Setting(containerEl)
-      .setName('Status')
-      .setHeading()
-      .addButton((btn) =>
-        btn.setButtonText('Refresh').onClick(() => this.renderStatus()),
-      );
-    this.statusEl = containerEl.createDiv({ cls: 'qmd-status-inline' });
-    this.renderStatus();
   }
 }

@@ -11,19 +11,31 @@ import { McpQmdClient } from './client/mcp';
 import { SearchModal } from './ui/SearchModal';
 import { StatusModal } from './ui/StatusModal';
 
+const STATUS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
+
 export default class QmdSearchPlugin extends Plugin {
   settings!: QmdSearchSettings;
   client!: QmdClient;
   modelLoaded = false;
-  // Resolved at runtime; may differ from settings.qmdBinaryPath when that is
-  // still the default 'qmd' and the binary lives somewhere outside Electron's PATH.
   resolvedBinaryPath = 'qmd';
+
+  private statusBarItem!: HTMLElement;
 
   async onload(): Promise<void> {
     await this.loadSettings();
     this.resolvedBinaryPath = await initShellContext(this.settings.qmdBinaryPath);
     log.debug('plugin loaded: binary=%s transport=%s', this.resolvedBinaryPath, this.settings.transportMode);
     this.client = this.buildClient();
+
+    this.statusBarItem = this.addStatusBarItem();
+    this.statusBarItem.addClass('qmd-status-bar');
+    this.statusBarItem.setAttribute('title', 'QMD index status — click to refresh');
+    this.statusBarItem.addEventListener('click', () => this.refreshStatusBar());
+
+    // Initial status bar population after a short delay (client may be warming up)
+    setTimeout(() => this.refreshStatusBar(), 3000);
+    this.registerInterval(window.setInterval(() => this.refreshStatusBar(), STATUS_REFRESH_INTERVAL_MS));
 
     this.addCommand({
       id: 'qmd-search',
@@ -41,6 +53,12 @@ export default class QmdSearchPlugin extends Plugin {
       id: 'qmd-reindex',
       name: 'QMD: Re-index collections',
       callback: () => this.reindex(),
+    });
+
+    this.addCommand({
+      id: 'qmd-embed',
+      name: 'QMD: Generate embeddings',
+      callback: () => this.embed(),
     });
 
     this.addSettingTab(new QmdSettingTab(this.app, this));
@@ -66,6 +84,69 @@ export default class QmdSearchPlugin extends Plugin {
     }
   }
 
+  async refreshStatusBar(): Promise<void> {
+    if (!this.statusBarItem) return;
+    if (this.resolvedBinaryPath === 'qmd') {
+      this.statusBarItem.setText('qmd ✗');
+      this.statusBarItem.className = 'qmd-status-bar qmd-status-bar--err';
+      return;
+    }
+    try {
+      const s = await this.client.status();
+      const total = s.collections.reduce((n, c) => n + c.docCount, 0);
+
+      let stale = false;
+      const threshold = Date.now() - STALE_THRESHOLD_MS;
+      for (const col of s.collections) {
+        if (col.lastIndexed) {
+          const d = new Date(col.lastIndexed);
+          if (!isNaN(d.getTime()) && d.getTime() < threshold) { stale = true; break; }
+        }
+      }
+
+      if (stale) {
+        this.statusBarItem.setText(`qmd ⚠ ${total.toLocaleString()}`);
+        this.statusBarItem.className = 'qmd-status-bar qmd-status-bar--warn';
+        this.statusBarItem.setAttribute('title', 'QMD: index may be stale — click to refresh');
+      } else {
+        this.statusBarItem.setText(`qmd ${total.toLocaleString()}`);
+        this.statusBarItem.className = 'qmd-status-bar qmd-status-bar--ok';
+        this.statusBarItem.setAttribute('title', 'QMD index status — click to refresh');
+      }
+    } catch {
+      this.statusBarItem.setText('qmd ✗');
+      this.statusBarItem.className = 'qmd-status-bar qmd-status-bar--err';
+    }
+  }
+
+  reindex(): Promise<void> {
+    const notice = new Notice('QMD: re-indexing collections…', 0);
+    const args = this.settings.indexName ? ['--index', this.settings.indexName, 'update'] : ['update'];
+    return new Promise((resolve) => {
+      execFile(this.resolvedBinaryPath, args, { timeout: 600_000, env: buildEnv() }, (err) => {
+        notice.hide();
+        if (err) new Notice(`QMD: re-index error — ${err.message}`);
+        else new Notice('QMD: re-index complete ✓');
+        this.refreshStatusBar();
+        resolve();
+      });
+    });
+  }
+
+  embed(): Promise<void> {
+    const notice = new Notice('QMD: generating embeddings…', 0);
+    const args = this.settings.indexName ? ['--index', this.settings.indexName, 'embed'] : ['embed'];
+    return new Promise((resolve) => {
+      execFile(this.resolvedBinaryPath, args, { timeout: 600_000, env: buildEnv() }, (err) => {
+        notice.hide();
+        if (err) new Notice(`QMD: embed error — ${err.message}`);
+        else new Notice('QMD: embeddings complete ✓');
+        this.refreshStatusBar();
+        resolve();
+      });
+    });
+  }
+
   private buildClient(): QmdClient {
     if (this.settings.transportMode === 'mcp-http') {
       const c = new McpQmdClient(this.resolvedBinaryPath, this.settings.mcpPort);
@@ -75,15 +156,5 @@ export default class QmdSearchPlugin extends Plugin {
       return c;
     }
     return new CliQmdClient(this.resolvedBinaryPath, this.settings.indexName);
-  }
-
-  private reindex(): void {
-    const notice = new Notice('QMD: re-indexing collections…', 0);
-    const args = this.settings.indexName ? ['--index', this.settings.indexName, 'update'] : ['update'];
-    execFile(this.resolvedBinaryPath, args, { timeout: 600_000, env: buildEnv() }, (err) => {
-      notice.hide();
-      if (err) new Notice(`QMD: re-index error — ${err.message}`);
-      else new Notice('QMD: re-index complete ✓');
-    });
   }
 }

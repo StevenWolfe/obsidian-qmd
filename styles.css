@@ -302,3 +302,36 @@
 .qmd-error    { color: var(--color-red); }
 .qmd-muted    { color: var(--text-muted); }
 .qmd-no-results { color: var(--text-muted); text-align: center; padding: 20px 0; }
+
+/* ── Status bar ───────────────────────────────────────────── */
+.qmd-status-bar {
+  font-size: 0.8em;
+  cursor: pointer;
+  padding: 0 6px;
+}
+
+.qmd-status-bar--ok   { color: var(--text-muted); }
+.qmd-status-bar--warn { color: var(--color-yellow); }
+.qmd-status-bar--err  { color: var(--color-red); }
+
+/* ── Index management action row ──────────────────────────── */
+.qmd-action-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.qmd-action-row button {
+  padding: 4px 12px;
+  border-radius: var(--radius-s);
+  font-size: 0.85em;
+  cursor: pointer;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.qmd-action-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

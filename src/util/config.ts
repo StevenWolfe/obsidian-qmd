@@ -4,6 +4,8 @@ const fs = require('fs') as typeof import('fs');
 const os = require('os') as typeof import('os');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const path = require('path') as typeof import('path');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { execFile } = require('child_process') as typeof import('child_process');
 import yaml from 'js-yaml';
 
 interface IndexYml {
@@ -38,4 +40,34 @@ export function loadCollectionNames(): string[] {
     }
     return [];
   }
+}
+
+/**
+ * Try to enumerate named qmd indexes. Attempts two strategies in order:
+ * 1. `qmd index list` CLI (one name per line, ignores errors)
+ * 2. Filesystem scan of XDG data dir for *.db files
+ * Returns [] if neither yields results.
+ */
+export function loadIndexNamesAsync(binary: string, env: NodeJS.ProcessEnv): Promise<string[]> {
+  return new Promise((resolve) => {
+    execFile(binary, ['index', 'list'], { timeout: 5000, env }, (_err, stdout) => {
+      if (!_err && stdout.trim()) {
+        const names = stdout.split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('-'));
+        if (names.length > 0) { resolve(names); return; }
+      }
+
+      // Fallback: scan XDG data dir for *.db files
+      const dataDir = path.join(os.homedir(), '.local', 'share', 'qmd');
+      try {
+        const names = fs.readdirSync(dataDir)
+          .filter((f: string) => f.endsWith('.db'))
+          .map((f: string) => path.basename(f, '.db'));
+        resolve(names);
+      } catch {
+        resolve([]);
+      }
+    });
+  });
 }
