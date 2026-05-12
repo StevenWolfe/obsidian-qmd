@@ -1,6 +1,6 @@
 # QMD Search — Obsidian Plugin
 
-Search your [`qmd`](https://github.com/toblu/qmd)-indexed knowledge bases from inside Obsidian using BM25 keyword search, vector semantic search, and LLM-reranked hybrid search — all running locally.
+Search your [`qmd`](https://github.com/tobi/qmd)-indexed knowledge bases from inside Obsidian using BM25 keyword search, vector semantic search, and LLM-reranked hybrid search — all running locally.
 
 > **Desktop only.** Requires the `qmd` CLI and a configured collection.
 
